@@ -129,25 +129,35 @@ export function emoteTimeline(durationTicks: number, looping: boolean, apply: (t
   return { timeline, tick }
 }
 
-export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf): Promise<LoadedModel> {
-  const actionName = 'emote_' + em.name
-  const [player, found, bodyBuf] = await Promise.all([newPlayer(hashOf), findAction(actionName, data, hashOf), getFileBuffer(hashOf(BODY))])
+/** Everything an emote is made of: action block, props (+ textures), and the source files for download. */
+export async function emoteSources(em: EmoteDef, data: EmotesJson, hashOf: HashOf) {
+  const [found, bodyBuf] = await Promise.all([findAction('emote_' + em.name, data, hashOf), getFileBuffer(hashOf(BODY))])
   const files: DownloadFile[] = [{ name: 'default.bobj', data: new Uint8Array(bodyBuf) }]
   if (found) files.push({ name: `${em.name}.bobj`, data: new TextEncoder().encode(found.text) })
-  const props: { mesh: { visible: boolean }; showAt: number }[] = []
+  const props: { mesh: BobjMesh; texRel?: string; showAt: number }[] = []
   const bodyMeshes = em.meshes?.length ? ((await getFileJson<{ meshes?: EmotesJson['meshes'] }>(hashOf(BODY_JSON)).catch(() => ({}))) as { meshes?: EmotesJson['meshes'] }).meshes ?? {} : {}
+  const addFile = async (rel: string) => {
+    const name = rel.split('/').pop()!
+    if (!files.some((f) => f.name === name)) files.push({ name, data: new Uint8Array(await getFileBuffer(hashOf(rel))) })
+  }
   for (const m of em.meshes ?? []) {
     const prop = await findProp(m.name, data, hashOf)
     if (!prop) continue
     const texture = data.meshes[m.name]?.texture ?? bodyMeshes[m.name]?.texture
     const texRel = texture && texture.startsWith('lunar:') ? strip(texture) : undefined
-    const tex = texRel ? await bitmapOf(texRel, hashOf) : await skinBitmap()
-    props.push({ mesh: player.addMesh(prop.mesh, tex), showAt: m.show_at })
-    const propName = prop.file.split('/').pop()!
-    if (!files.some((f) => f.name === propName)) files.push({ name: propName, data: new Uint8Array(await getFileBuffer(hashOf(prop.file))) })
-    if (texRel && !files.some((f) => f.name === texRel.split('/').pop())) {
-      files.push({ name: texRel.split('/').pop()!, data: new Uint8Array(await getFileBuffer(hashOf(texRel))) })
-    }
+    props.push({ mesh: prop.mesh, texRel, showAt: m.show_at })
+    await addFile(prop.file)
+    if (texRel) await addFile(texRel)
+  }
+  return { found, files, props }
+}
+
+export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf): Promise<LoadedModel> {
+  const [player, { found, files, props: parts }] = await Promise.all([newPlayer(hashOf), emoteSources(em, data, hashOf)])
+  const props: { mesh: { visible: boolean }; showAt: number }[] = []
+  for (const p of parts) {
+    const tex = p.texRel ? await bitmapOf(p.texRel, hashOf) : await skinBitmap()
+    props.push({ mesh: player.addMesh(p.mesh, tex), showAt: p.showAt })
   }
   const action = found?.action
   const duration = Math.max(em.duration, action?.length ?? 0) || 1

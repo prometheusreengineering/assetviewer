@@ -10,7 +10,7 @@ import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDe
 import { LUNAR_INDEXES } from '../../config'
 import { fetchImageSize } from '../../dimensions'
 import { dressPlayer } from './dress'
-import { loadEmote } from './emotes'
+import { emoteSources, loadEmote } from './emotes'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
 const COSMETIC_LABELS: Record<string, [string, string]> = {
@@ -459,6 +459,64 @@ export const lunarProvider: CosmeticProvider = {
   },
 
   itemById: (id) => byId.get(id)?.item,
+
+  async sourceFiles(item) {
+    const e = byId.get(item.id)
+    if (!e) return []
+    if (e.kind === 'emote') {
+      const em = catalog!.emotes?.emotes.find((x) => x.id === item.fields.id)
+      return em ? (await emoteSources(em, catalog!.emotes!, hashOf)).files : []
+    }
+    const out = new Map<string, DownloadFile>()
+    const add = async (rel: string) => {
+      rel = stripNs(rel)
+      if (out.has(rel)) return
+      const f = await optional(rel)
+      if (!f) return
+      out.set(rel, f)
+      const mc = await optional(rel + '.mcmeta')
+      if (mc) out.set(rel + '.mcmeta', mc)
+    }
+    await add(e.path)
+    if (e.kind === 'gek') {
+      // Every "lunar:..." reference in the gek (models, textures, animations, extras).
+      const refs: string[] = []
+      const walk = (v: unknown) => {
+        if (typeof v === 'string' && v.startsWith('lunar:')) refs.push(v)
+        else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x)
+      }
+      walk(await getFileJson(hashOf(e.path)))
+      for (const r of refs) await add(r)
+    } else if (e.kind === 'wing2d') {
+      await add('cosmetics/models/gek/wings/simple_2d_wings.geo.json')
+      await add('cosmetics/models/gek/wings/simple_2d_wings.anim.json')
+    } else if (e.kind === 'obj') {
+      const objPath = catalog!.objs.get(e.modelKey)
+      if (objPath) await add(objPath.slice(PREFIX.length))
+    }
+    // Keep names unique inside the item's folder.
+    const files = [...out.values()]
+    const seen = new Map<string, number>()
+    return files.map((f) => {
+      const n = seen.get(f.name) ?? 0
+      seen.set(f.name, n + 1)
+      return n ? { ...f, name: f.name.replace(/(\.[^.]+)?$/, `_${n}$1`) } : f
+    })
+  },
+
+  estimateSize(item) {
+    const e = byId.get(item.id)
+    if (!e) return 0
+    if (e.kind === 'emote') return 600_000
+    if (e.kind === 'gek') {
+      // A gek and its files share a folder.
+      const dir = PREFIX + e.path.replace(/\/[^/]+$/, '/')
+      let n = 0
+      for (const [p, size] of catalog!.sizes) if (p.startsWith(dir)) n += size
+      return n
+    }
+    return catalog!.sizes.get(PREFIX + e.path) ?? 0
+  },
 
   async rawFile(item) {
     const e = byId.get(item.id)!

@@ -97,6 +97,10 @@ export interface CosmeticProvider {
   loadModel(item: CosmeticItem, opts?: { raw?: boolean }): Promise<LoadedModel>
   /** A player wearing `items`, optionally playing an emote item. */
   dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem): Promise<LoadedModel>
+  /** The item's source files (model, textures, animations, metadata), for bulk export. */
+  sourceFiles?(item: CosmeticItem): Promise<DownloadFile[]>
+  /** Rough download size in bytes of sourceFiles(), from the index. */
+  estimateSize?(item: CosmeticItem): number
   /** Looks up any item by id (deep links, collections). */
   itemById?(id: string): CosmeticItem | undefined
   /** Non-visual file items. */

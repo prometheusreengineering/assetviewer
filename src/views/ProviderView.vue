@@ -10,6 +10,7 @@ import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FilterBar from '../components/FilterBar.vue'
 import FileBrowser from '../components/FileBrowser.vue'
 import OutfitBuilder from '../components/OutfitBuilder.vue'
+import ExportButton from '../components/ExportButton.vue'
 import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rule, type SortKey } from '../filtering'
 import { providers } from '../providers'
 import { stats } from '../stats'
@@ -275,6 +276,7 @@ const menuModel = computed(() => {
           <Button icon="pi pi-upload" size="small" text severity="secondary" title="Import JSON" @click="importInput?.click()" />
           <input ref="importInput" type="file" accept="application/json,.json" hidden @change="importCollections" />
         </template>
+        <ExportButton :provider="provider" :items="items" :name="collection?.name ?? category ?? 'export'" />
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
         </FilterBar>
