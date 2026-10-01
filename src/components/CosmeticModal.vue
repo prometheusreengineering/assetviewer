@@ -182,10 +182,10 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
       <Button v-if="raw" label="Download file" icon="pi pi-download" size="small" @click="downloadUrl(raw.url, raw.name)" />
     </div>
     <dl v-if="infoRows.length" class="info">
-      <template v-for="[k, v] in infoRows" :key="k">
+      <div v-for="[k, v] in infoRows" :key="k" class="pair" :class="{ wide: v.length > 36 }">
         <dt>{{ k }}</dt>
         <dd>{{ v }}</dd>
-      </template>
+      </div>
     </dl>
   </Dialog>
 </template>
@@ -198,7 +198,9 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
 .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
 label { display: flex; align-items: center; gap: 0.5rem; }
-.info { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
+.info { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 2rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
+.pair { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0 0.75rem; min-width: 0; }
+.pair.wide { grid-column: 1 / -1; }
 .info dt { opacity: 0.6; }
 .info dd { margin: 0; word-break: break-all; }
 </style>
