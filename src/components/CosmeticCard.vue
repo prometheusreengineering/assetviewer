@@ -5,7 +5,8 @@ const queue = createQueue(6)
 </script>
 
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { FAV, useCollections } from '../collections'
 import AnimatedImage from './AnimatedImage.vue'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import type { SharedRenderer, Slot } from '../three/sharedRenderer'
@@ -22,6 +23,8 @@ const imgSrc = ref('')
 const frames = ref<{ frameW?: number; frameH?: number; frametimeMs: number }>()
 const ext = props.item.render === 'file' ? (props.item.fields.ext as string | undefined) : undefined
 const state = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
+const collections = useCollections(props.provider.id)
+const fav = computed(() => collections.has(FAV, props.item.id))
 
 let slot: Slot | undefined
 let visible = false
@@ -104,12 +107,18 @@ onBeforeUnmount(() => {
       <i v-else-if="state === 'error'" class="pi pi-exclamation-triangle" title="Failed to load" />
     </div>
     <div class="name" :title="item.name">{{ item.name }}</div>
+    <button class="star" :class="{ on: fav }" :title="fav ? 'Remove from Favorites' : 'Add to Favorites'" @click.stop="collections.toggle(FAV, item.id)">
+      <i :class="fav ? 'pi pi-star-fill' : 'pi pi-star'" />
+    </button>
   </div>
 </template>
 
 <style scoped>
-.card { background: var(--p-surface-900); border: 1px solid var(--p-surface-800); border-radius: 10px; cursor: pointer; overflow: hidden; content-visibility: auto; contain-intrinsic-size: 190px 230px; }
+.card { position: relative; background: var(--p-surface-900); border: 1px solid var(--p-surface-800); border-radius: 10px; cursor: pointer; overflow: hidden; content-visibility: auto; contain-intrinsic-size: 190px 230px; }
 .card:hover { border-color: var(--p-primary-color); }
+.star { position: absolute; top: 0.4rem; right: 0.4rem; border: 0; background: color-mix(in srgb, var(--p-surface-950) 70%, transparent); color: var(--p-surface-300); border-radius: 50%; width: 1.9rem; height: 1.9rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.card:hover .star, .star.on { opacity: 1; }
+.star.on { color: #f5c542; }
 .view { position: relative; aspect-ratio: 1; display: grid; place-items: center; }
 .view .pi-exclamation-triangle { opacity: 0.4; }
 .filetile { display: grid; place-items: center; gap: 0.25rem; opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; }

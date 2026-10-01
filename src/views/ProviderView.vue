@@ -13,6 +13,8 @@ import OutfitBuilder from '../components/OutfitBuilder.vue'
 import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rule, type SortKey } from '../filtering'
 import { providers } from '../providers'
 import { stats } from '../stats'
+import { COLLECTION_PREFIX, FAV, useCollections } from '../collections'
+import Button from 'primevue/button'
 import type { CategoryDef, CosmeticItem, FieldDef } from '../providers/types'
 
 const props = defineProps<{ provider: string; category?: string }>()
@@ -47,6 +49,8 @@ const isFiles = computed(() => props.category === 'all-files')
 const isOutfit = computed(() => props.category === 'outfit')
 // Pages that are not an item grid.
 const isTool = computed(() => isFiles.value || isOutfit.value)
+const collections = computed(() => useCollections(props.provider))
+const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX) ? collections.value.get(props.category.slice(COLLECTION_PREFIX.length)) : undefined))
 
 const search = ref('')
 
@@ -110,8 +114,66 @@ watch(sorts, (v) => {
   } catch {}
 })
 
-const fields = computed<FieldDef[]>(() => (ready.value && props.category && !isTool.value ? provider.value.fields(props.category) : []))
-const allItems = computed<CosmeticItem[]>(() => (ready.value && props.category && !isTool.value ? provider.value.items(props.category) : []))
+const allItems = computed<CosmeticItem[]>(() => {
+  if (!ready.value || !props.category || isTool.value) return []
+  if (collection.value) return collection.value.items.map((id) => provider.value.itemById?.(id)).filter((it): it is CosmeticItem => !!it)
+  return provider.value.items(props.category)
+})
+// A collection mixes categories: offer the union of their fields (multi options merged).
+const fields = computed<FieldDef[]>(() => {
+  if (!ready.value || !props.category || isTool.value) return []
+  if (!collection.value) return provider.value.fields(props.category)
+  const out = new Map<string, FieldDef>()
+  for (const cat of new Set(allItems.value.map((it) => it.category))) {
+    for (const f of provider.value.fields(cat)) {
+      const prev = out.get(f.key)
+      out.set(f.key, prev?.options && f.options ? { ...prev, options: [...new Set([...prev.options, ...f.options])].sort() } : prev ?? f)
+    }
+  }
+  return [...out.values()]
+})
+
+// ---- collection actions -----------------------------------------------------
+const importInput = ref<HTMLInputElement>()
+function newCollection() {
+  const name = prompt('Name of the new collection')
+  if (!name) return
+  const c = collections.value.create(name)
+  router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`)
+}
+function renameCollection() {
+  const c = collection.value
+  const name = c && prompt('Rename collection', c.name)
+  if (c && name) collections.value.rename(c.id, name)
+}
+function deleteCollection() {
+  const c = collection.value
+  if (!c || c.id === FAV || !confirm(`Delete "${c.name}"? (${c.items.length} items)`)) return
+  collections.value.remove(c.id)
+  router.push(`/${props.provider}/${COLLECTION_PREFIX}${FAV}`)
+}
+function exportCollection() {
+  const c = collection.value
+  if (!c) return
+  const json = collections.value.exportJson([c.id], (id) => provider.value.itemById?.(id)?.name)
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
+  a.download = `${c.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.json`
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+async function importCollections(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  try {
+    const n = collections.value.importJson(await file.text())
+    alert(`Imported ${n} item${n === 1 ? '' : 's'}.`)
+  } catch (err) {
+    alert(String(err))
+  } finally {
+    ;(e.target as HTMLInputElement).value = ''
+  }
+}
 
 // Image width/height are read lazily (a few header bytes per file) once a rule or sort needs them.
 const needsDims = computed(() => [...rules.value, ...sorts.value].some((x) => x.field === 'width' || x.field === 'height'))
@@ -162,7 +224,20 @@ const menuModel = computed(() => {
       command: () => router.push(`/${props.provider}/${c.id}`),
     })
   }
-  return [...groups].map(([label, items]) => ({ label, items }))
+  const model = [...groups].map(([label, items]) => ({ label, items }))
+  if (provider.value.available) {
+    const lists: { label: string; icon: string; class: string; command: () => void }[] = collections.value.all().map((c) => ({
+      label: `${c.name} (${c.items.length})`,
+      icon: c.id === FAV ? 'pi pi-star-fill' : 'pi pi-list',
+      class: props.category === COLLECTION_PREFIX + c.id ? 'cat-active' : '',
+      command: () => void router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`),
+    }))
+    lists.push({ label: 'New collection', icon: 'pi pi-plus', class: '', command: newCollection })
+    // Right after "All files" and Tools.
+    const at = model.findIndex((g) => g.label.startsWith('Cosmetics'))
+    model.splice(at < 0 ? model.length : at, 0, { label: 'Collections', items: lists })
+  }
+  return model
 })
 </script>
 
@@ -193,6 +268,13 @@ const menuModel = computed(() => {
             title="Animation shown on all 3D thumbnails"
             @update:model-value="(v: string | null) => (animState = v ?? '')"
           />
+        <template v-if="collection">
+          <Button icon="pi pi-pencil" size="small" text severity="secondary" title="Rename" @click="renameCollection" />
+          <Button v-if="collection.id !== 'fav'" icon="pi pi-trash" size="small" text severity="secondary" title="Delete collection" @click="deleteCollection" />
+          <Button icon="pi pi-download" size="small" text severity="secondary" title="Export as JSON" @click="exportCollection" />
+          <Button icon="pi pi-upload" size="small" text severity="secondary" title="Import JSON" @click="importInput?.click()" />
+          <input ref="importInput" type="file" accept="application/json,.json" hidden @change="importCollections" />
+        </template>
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
         </FilterBar>
