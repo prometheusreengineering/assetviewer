@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import InputText from 'primevue/inputtext'
 import Menu from 'primevue/menu'
 import Message from 'primevue/message'
-import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
 import Slider from 'primevue/slider'
-import ToggleSwitch from 'primevue/toggleswitch'
-import { computed, ref, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
+import FilterBar from '../components/FilterBar.vue'
 import FileBrowser from '../components/FileBrowser.vue'
+import { applyView, type Rule, type SortKey } from '../filtering'
 import { providers } from '../providers'
 import { stats } from '../stats'
-import type { CategoryDef, CosmeticItem, FilterDef } from '../providers/types'
+import type { CategoryDef, CosmeticItem, FieldDef } from '../providers/types'
 
 const props = defineProps<{ provider: string; category?: string }>()
 const router = useRouter()
@@ -41,31 +40,71 @@ watchEffect(async () => {
   }
 })
 
+const isFiles = computed(() => props.category === 'all-files')
+
 const search = ref('')
-const filterState = ref<Record<string, any>>({})
+const rules = ref<Rule[]>([])
+const sorts = ref<SortKey[]>([])
+
+const dimVersion = ref(0)
+const measuring = ref<{ done: number; total: number }>()
+let abort: AbortController | undefined
+function cancelMeasure() {
+  abort?.abort()
+  abort = undefined
+  measuring.value = undefined
+}
+onBeforeUnmount(cancelMeasure)
+// The last sort is remembered per category.
+const sortKey = () => `assetviewer.sort.${props.provider}.${props.category}`
+function loadSort(): SortKey[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(sortKey()) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
 watch(
   () => props.category,
   () => {
     search.value = ''
-    filterState.value = {}
+    rules.value = []
+    sorts.value = loadSort()
+    cancelMeasure()
   },
+  { immediate: true },
 )
+watch(sorts, (v) => {
+  try {
+    localStorage.setItem(sortKey(), JSON.stringify(v))
+  } catch {}
+})
 
-const filters = computed<FilterDef[]>(() => (ready.value && props.category ? provider.value.filters(props.category) : []))
-const allItems = computed<CosmeticItem[]>(() => (ready.value && props.category ? provider.value.items(props.category) : []))
+const fields = computed<FieldDef[]>(() => (ready.value && props.category && !isFiles.value ? provider.value.fields(props.category) : []))
+const allItems = computed<CosmeticItem[]>(() => (ready.value && props.category && !isFiles.value ? provider.value.items(props.category) : []))
+
+// Image width/height are read lazily (a few header bytes per file) once a rule or sort needs them.
+const needsDims = computed(() => [...rules.value, ...sorts.value].some((x) => x.field === 'width' || x.field === 'height'))
+watch([needsDims, allItems], async ([need]) => {
+  if (!need || !provider.value.ensureDimensions) return
+  cancelMeasure()
+  const ctl = (abort = new AbortController())
+  let last = 0
+  await provider.value.ensureDimensions(
+    allItems.value,
+    (done, total) => {
+      measuring.value = { done, total }
+      if (done - last >= 100 || done === total) (last = done, dimVersion.value++)
+    },
+    ctl.signal,
+  )
+  if (!ctl.signal.aborted) dimVersion.value++
+})
 
 const items = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  return allItems.value.filter((it) => {
-    if (q && !it.name.toLowerCase().includes(q)) return false
-    for (const f of filters.value) {
-      const v = filterState.value[f.key]
-      const field = it.fields[f.key]
-      if (f.type === 'toggle' && v && field !== true) return false
-      if (f.type === 'multi' && Array.isArray(v) && v.length && !(Array.isArray(field) && v.some((x) => field.includes(x)))) return false
-    }
-    return true
-  })
+  void dimVersion.value
+  return applyView(allItems.value, search.value, rules.value, sorts.value, fields.value)
 })
 
 // Cards per row (zoom): fewer columns means bigger previews.
@@ -81,7 +120,6 @@ watch(cols, (c) => {
   } catch {}
 })
 
-const isFiles = computed(() => props.category === 'all-files')
 
 const menuModel = computed(() => {
   const groups = new Map<string, object[]>()
@@ -114,22 +152,10 @@ const menuModel = computed(() => {
       <FileBrowser v-if="isFiles" :provider="provider" />
       <template v-else>
       <div class="toolbar">
-        <InputText v-model="search" placeholder="Search…" />
-        <template v-for="f in filters" :key="f.key">
-          <MultiSelect
-            v-if="f.type === 'multi'"
-            v-model="filterState[f.key]"
-            :options="f.options"
-            :placeholder="f.label"
-            display="chip"
-            filter
-            :max-selected-labels="2"
-            class="ms"
-          />
-          <label v-else class="toggle"><ToggleSwitch v-model="filterState[f.key]" />{{ f.label }}</label>
-        </template>
+        <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
+        </FilterBar>
       </div>
       <CosmeticGrid :key="provider.id + category" :provider="provider" :items="items" :cols="cols" />
       </template>
@@ -147,7 +173,6 @@ const menuModel = computed(() => {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--p-surface-800); }
 .ms { min-width: 12rem; max-width: 22rem; }
-.toggle { display: flex; align-items: center; gap: 0.5rem; }
 .count { margin-left: auto; opacity: 0.6; }
 .zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
 .slider { width: 9rem; }

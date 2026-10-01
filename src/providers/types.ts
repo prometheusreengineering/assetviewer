@@ -9,7 +9,7 @@ export interface CategoryDef {
   group?: string
 }
 
-export type FieldValue = string | string[] | boolean
+export type FieldValue = string | string[] | boolean | number
 
 export interface CosmeticItem {
   id: string
@@ -21,11 +21,17 @@ export interface CosmeticItem {
   render: '3d' | 'image' | 'file'
 }
 
-export interface FilterDef {
+export type FieldType = 'text' | 'number' | 'date' | 'multi' | 'bool'
+
+/** A field of the items that can be filtered and/or sorted. `name` is read from `item.name`, the rest from `item.fields`. */
+export interface FieldDef {
   key: string
   label: string
-  type: 'multi' | 'toggle'
+  type: FieldType
+  /** Known values for `multi` fields. */
   options?: string[]
+  /** Measured lazily (see `ensureDimensions`); unknown until then. */
+  lazy?: boolean
 }
 
 export interface DownloadFile {
@@ -71,7 +77,7 @@ export interface CosmeticProvider {
   available: boolean
   load(): Promise<void>
   categories(): CategoryDef[]
-  filters(category: string): FilterDef[]
+  fields(category: string): FieldDef[]
   items(category: string): CosmeticItem[]
   imageUrl(item: CosmeticItem): Promise<string>
   /** Frame layout (px) for stacked-frame images, if the item is animated. */
@@ -85,6 +91,8 @@ export interface CosmeticProvider {
   fileItem?(path: string): CosmeticItem
   /** Catalog statistics for the footer. */
   stats?(): { items: number; files: number; indexes: string[] }
+  /** Measures the lazy fields (image width/height) of the items; resolves when done. */
+  ensureDimensions?(items: CosmeticItem[], onProgress: (done: number, total: number) => void, signal: AbortSignal): Promise<void>
   /** Metadata lines shown in the modal. */
   info?(item: CosmeticItem): Record<string, string>
 }

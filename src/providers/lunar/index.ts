@@ -6,8 +6,9 @@ import { AnimationPlayer, type AnimFile } from '../../three/animation/bedrockAni
 import { parseFunctions, type FnLib } from '../../three/animation/molang'
 import { disposeObject, fitObject } from '../../three/fit'
 import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } from '../../three/geoModel'
-import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FilterDef, IndexedFile, LoadedModel } from '../types'
+import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { LUNAR_INDEXES } from '../../config'
+import { fetchImageSize } from '../../dimensions'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
 const COSMETIC_LABELS: Record<string, [string, string]> = {
@@ -293,6 +294,24 @@ function blobUrl(path: string): Promise<string> {
   return p
 }
 
+/** Entries whose main file is an image whose header can be read for width/height. */
+const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'file' && /\.(webp|png|gif)$/i.test(e.path)
+
+/** Fills the catalog-wide fields (id, size, path, folder, ...) used by the filter and sort bar. */
+function enrich(c: LunarCatalog) {
+  for (const e of c.entries) {
+    const f = e.item.fields
+    const ext = e.path.split('.').pop() ?? ''
+    if (/^\d+$/.test(e.item.id)) f.id = Number(e.item.id)
+    f.path = e.path
+    f.folder = e.path.split('/').slice(0, -1).join('/')
+    f.ext = ext
+    f.size = c.sizes.get(PREFIX + e.path) ?? 0
+    f.type = e.item.render === '3d' ? '3D' : e.item.render === 'image' ? '2D' : 'File'
+    f.model = e.item.render === '3d'
+  }
+}
+
 export const lunarProvider: CosmeticProvider = {
   id: 'lunar',
   name: 'Lunar Client',
@@ -303,6 +322,7 @@ export const lunarProvider: CosmeticProvider = {
       catalog = c
       byId = new Map(c.entries.map((e) => [e.item.id, e]))
       owners = undefined
+      enrich(c)
     })
     return loading
   },
@@ -323,31 +343,58 @@ export const lunarProvider: CosmeticProvider = {
       count: counts.get(id)!,
       label: COSMETIC_LABELS[id]?.[0] ?? id,
       icon: COSMETIC_LABELS[id]?.[1] ?? 'pi-box',
-      group: 'Cosmetics',
+      group: 'Cosmetics (3D)',
     }))
     for (const id of RESOURCE_CATEGORIES) {
       if (!counts.has(id)) continue
-      defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources' })
+      defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources (2D)' })
     }
     defs.unshift({ id: ALL_FILES, count: catalog!.files.size, label: 'All files', icon: 'pi-folder-open', group: '' })
     return defs
   },
 
-  filters(category): FilterDef[] {
-    const themes = new Set<string>()
-    const colors = new Set<string>()
-    let animated = false
-    for (const e of catalog!.entries) {
-      if (e.item.category !== category) continue
-      for (const t of e.item.fields.themes as string[]) themes.add(t)
-      for (const c of e.item.fields.colors as string[]) colors.add(c)
-      animated ||= e.item.fields.animated === true
+  fields(category): FieldDef[] {
+    const list = catalog!.entries.filter((e) => e.item.category === category).map((e) => e.item)
+    const has = (k: string) => list.some((it) => it.fields[k] !== undefined && it.fields[k] !== '' && !(Array.isArray(it.fields[k]) && !(it.fields[k] as string[]).length))
+    const opts = (k: string) => [...new Set(list.flatMap((it) => (Array.isArray(it.fields[k]) ? (it.fields[k] as string[]) : it.fields[k] ? [String(it.fields[k])] : [])))].sort()
+    const out: FieldDef[] = [{ key: 'name', label: 'Name', type: 'text' }]
+    const add = (key: string, label: string, type: FieldDef['type'], extra: Partial<FieldDef> = {}) => has(key) && out.push({ key, label, type, ...extra })
+    add('id', 'ID', 'number')
+    add('released', 'Released', 'date')
+    add('themes', 'Theme', 'multi', { options: opts('themes') })
+    add('colors', 'Color', 'multi', { options: opts('colors') })
+    add('type', 'Type', 'multi', { options: opts('type') })
+    add('ext', 'File type', 'multi', { options: opts('ext') })
+    add('folder', 'Folder', 'multi', { options: opts('folder') })
+    add('path', 'Path', 'text')
+    add('size', 'File size (bytes)', 'number')
+    if (list.some((it) => measurable(byId.get(it.id)))) {
+      out.push({ key: 'width', label: 'Image width (px)', type: 'number', lazy: true }, { key: 'height', label: 'Image height (px)', type: 'number', lazy: true })
     }
-    const out: FilterDef[] = []
-    if (themes.size) out.push({ key: 'themes', label: 'Theme', type: 'multi', options: [...themes].sort() })
-    if (colors.size) out.push({ key: 'colors', label: 'Color', type: 'multi', options: [...colors].sort() })
-    if (animated) out.push({ key: 'animated', label: 'Animated', type: 'toggle' })
+    add('animated', 'Animated', 'bool')
+    add('special', 'Special', 'bool')
+    add('model', 'Has 3D model', 'bool')
     return out
+  },
+
+  async ensureDimensions(items, onProgress, signal) {
+    const todo = items.filter((it) => it.fields.width === undefined && measurable(byId.get(it.id)))
+    let done = 0
+    onProgress(0, todo.length)
+    const queue = [...todo]
+    const worker = async () => {
+      for (let it = queue.shift(); it && !signal.aborted; it = queue.shift()) {
+        try {
+          const size = await fetchImageSize(fileUrl(hashOf(byId.get(it.id)!.path)), signal)
+          if (size) [it.fields.width, it.fields.height] = size
+          else it.fields.width = it.fields.height = 0
+        } catch {
+          if (signal.aborted) return
+        }
+        onProgress(++done, todo.length)
+      }
+    }
+    await Promise.all(Array.from({ length: 12 }, worker))
   },
 
   items: (category) => catalog!.entries.filter((e) => e.item.category === category).map((e) => e.item),

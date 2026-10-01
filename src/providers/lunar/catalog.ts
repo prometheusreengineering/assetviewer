@@ -155,6 +155,8 @@ export async function loadLunarCatalog(): Promise<LunarCatalog> {
           themes: c.tags ?? [],
           colors: c.colors ?? [],
           animated: !!c.animated || has(path + '.mcmeta'),
+          special: !!c.special,
+          ...(c.releasedAt && !Number.isNaN(Date.parse(c.releasedAt)) ? { released: Date.parse(c.releasedAt) } : {}),
         },
       },
       info: {

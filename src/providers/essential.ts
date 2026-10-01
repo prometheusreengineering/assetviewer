@@ -7,7 +7,7 @@ export const essentialProvider: CosmeticProvider = {
   available: false,
   load: async () => {},
   categories: () => [],
-  filters: () => [],
+  fields: () => [],
   items: () => [],
   imageUrl: () => Promise.reject(new Error('Essential is not supported yet')),
   loadModel: () => Promise.reject(new Error('Essential is not supported yet')),
