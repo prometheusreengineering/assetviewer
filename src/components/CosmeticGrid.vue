@@ -26,6 +26,6 @@ onBeforeUnmount(() => renderer.detach())
 </template>
 
 <style scoped>
-.grid-wrap { position: relative; flex: 1; overflow: auto; padding: 1rem; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; }
+.grid-wrap { position: relative; flex: 1; overflow: auto; }
+.grid { padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; }
 </style>

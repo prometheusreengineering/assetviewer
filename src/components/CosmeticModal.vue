@@ -1,40 +1,41 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import {
-  AmbientLight,
-  DirectionalLight,
-  Mesh,
-  PerspectiveCamera,
-  Scene,
-  WebGLRenderer,
-  type MeshLambertMaterial,
-} from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
-import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
+import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile } from '../providers/types'
+import AnimatedImage from './AnimatedImage.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
 const emit = defineEmits<{ close: [] }>()
 
 const canvasHost = ref<HTMLElement>()
 const imgSrc = ref('')
+const imgFrames = ref<{ frameW?: number; frameH?: number; frametimeMs: number }>()
+const raw = ref<RawFile>()
 const loading = ref(false)
 const error = ref('')
 const wireframe = ref(false)
 const autoRotate = ref(true)
 const hasModel = ref(false)
+const states = ref<string[]>([])
+const state = ref('')
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
 let controls: OrbitControls | undefined
 let raf = 0
+let token = 0
+const infoRows = computed(() => (props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
+const shown = shallowRef<CosmeticItem | null>(null)
 
 function teardown() {
+  token++
   cancelAnimationFrame(raf)
   controls?.dispose()
   renderer?.dispose()
@@ -45,26 +46,42 @@ function teardown() {
   controls = undefined
   hasModel.value = false
   imgSrc.value = ''
+  imgFrames.value = undefined
+  raw.value = undefined
+  states.value = []
+  state.value = ''
   error.value = ''
 }
 
 async function open(item: CosmeticItem) {
   teardown()
+  const mine = token
+  shown.value = item
   loading.value = true
   try {
+    if (item.render === 'file') {
+      raw.value = await props.provider.rawFile!(item)
+      return
+    }
     if (item.render === 'image') {
+      imgFrames.value = item.fields.animated ? await props.provider.imageFrames?.(item) : undefined
       imgSrc.value = await props.provider.imageUrl(item)
       return
     }
-    const loaded = await props.provider.loadModel(item)
+    const [loaded, { OrbitControls }] = await Promise.all([
+      props.provider.loadModel(item),
+      import('three/examples/jsm/controls/OrbitControls.js'),
+    ])
     await nextTick()
     const host = canvasHost.value
-    if (!host) {
+    if (!host || mine !== token) {
       loaded.dispose()
       return
     }
     model = loaded
     hasModel.value = true
+    states.value = loaded.states
+    state.value = loaded.state
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 2.2))
     const key = new DirectionalLight(0xffffff, 1.4)
@@ -91,7 +108,7 @@ async function open(item: CosmeticItem) {
   } catch (e) {
     error.value = String(e)
   } finally {
-    loading.value = false
+    if (mine === token) loading.value = false
   }
 }
 
@@ -104,15 +121,17 @@ watch(wireframe, (w) => {
     if (o instanceof Mesh) (o.material as MeshLambertMaterial).wireframe = w
   })
 })
+watch(state, (s) => model?.setState(s))
 onBeforeUnmount(teardown)
 
-const slug = () => props.item!.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+const slug = () => (shown.value?.name ?? 'item').toLowerCase().replace(/[^a-z0-9]+/g, '_')
 
 function downloadZip() {
   download(`${slug()}.zip`, zipFiles(model!.files), 'application/zip')
 }
 
-function downloadGlb() {
+async function downloadGlb() {
+  const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js')
   new GLTFExporter().parse(
     model!.object,
     (result) => download(`${slug()}.glb`, result as ArrayBuffer, 'model/gltf-binary'),
@@ -121,10 +140,11 @@ function downloadGlb() {
   )
 }
 
-async function downloadImage() {
-  const blob = await (await fetch(imgSrc.value)).blob()
-  download(`${slug()}.webp`, blob, 'image/webp')
+async function downloadUrl(url: string, name: string) {
+  const blob = await (await fetch(url)).blob()
+  download(name, blob, blob.type || 'application/octet-stream')
 }
+const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp'}`
 </script>
 
 <template>
@@ -136,9 +156,10 @@ async function downloadImage() {
     :style="{ width: 'min(900px, 95vw)' }"
     @update:visible="(v: boolean) => !v && emit('close')"
   >
-    <div class="stage">
-      <div v-show="!imgSrc" ref="canvasHost" class="canvas" />
-      <img v-if="imgSrc" :src="imgSrc" class="flat" />
+    <div class="stage" :class="{ text: !!raw }">
+      <div v-show="item?.render === '3d'" ref="canvasHost" class="canvas" />
+      <AnimatedImage v-if="imgSrc" :src="imgSrc" v-bind="imgFrames" />
+      <pre v-if="raw" class="code">{{ raw.text ?? `Binary file, ${raw.size} bytes. Use the download button.` }}</pre>
       <i v-if="loading" class="pi pi-spin pi-spinner busy" />
       <p v-if="error" class="err">{{ error }}</p>
     </div>
@@ -146,20 +167,31 @@ async function downloadImage() {
       <template v-if="hasModel">
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
+        <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
         <Button label="ZIP (source files)" icon="pi pi-download" size="small" @click="downloadZip" />
         <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
       </template>
-      <Button v-if="imgSrc" label="Download image" icon="pi pi-download" size="small" @click="downloadImage" />
+      <Button v-if="imgSrc" label="Download image" icon="pi pi-download" size="small" @click="downloadUrl(imgSrc, imageName())" />
+      <Button v-if="raw" label="Download file" icon="pi pi-download" size="small" @click="downloadUrl(raw.url, raw.name)" />
     </div>
+    <dl v-if="infoRows.length" class="info">
+      <template v-for="[k, v] in infoRows" :key="k">
+        <dt>{{ k }}</dt>
+        <dd>{{ v }}</dd>
+      </template>
+    </dl>
   </Dialog>
 </template>
 
 <style scoped>
-.stage { position: relative; height: 60vh; background: var(--p-surface-950); border-radius: 8px; overflow: hidden; display: grid; place-items: center; }
+.stage { position: relative; height: 60vh; background: var(--p-surface-950); border-radius: 8px; overflow: hidden; }
 .canvas { position: absolute; inset: 0; }
-.flat { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
-.busy { position: absolute; font-size: 2rem; }
-.err { color: var(--p-red-400); }
+.code { position: absolute; inset: 0; margin: 0; padding: 1rem; overflow: auto; font-size: 0.8rem; }
+.busy { position: absolute; inset: 0; margin: auto; width: 2rem; height: 2rem; font-size: 2rem; }
+.err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
 .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
 label { display: flex; align-items: center; gap: 0.5rem; }
+.info { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
+.info dt { opacity: 0.6; }
+.info dd { margin: 0; word-break: break-all; }
 </style>

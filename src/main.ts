@@ -9,6 +9,9 @@ import './style.css'
 document.documentElement.classList.add('app-dark')
 
 createApp(App)
-  .use(PrimeVue, { theme: { preset: Aura, options: { darkModeSelector: '.app-dark' } } })
+  .use(PrimeVue, {
+    license: import.meta.env.PRIMEUI_LICENSE,
+    theme: { preset: Aura, options: { darkModeSelector: '.app-dark' } },
+  })
   .use(router)
   .mount('#app')

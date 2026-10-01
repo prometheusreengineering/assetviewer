@@ -8,6 +8,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
+import FileBrowser from '../components/FileBrowser.vue'
 import { providers } from '../providers'
 import type { CategoryDef, CosmeticItem, FilterDef } from '../providers/types'
 
@@ -63,14 +64,22 @@ const items = computed(() => {
   })
 })
 
-const menuModel = computed(() =>
-  categories.value.map((c) => ({
-    label: `${c.label} (${c.count})`,
-    icon: `pi ${c.icon}`,
-    class: c.id === props.category ? 'cat-active' : '',
-    command: () => router.push(`/${props.provider}/${c.id}`),
-  })),
-)
+const isFiles = computed(() => props.category === 'all-files')
+
+const menuModel = computed(() => {
+  const groups = new Map<string, object[]>()
+  for (const c of categories.value) {
+    const g = c.group ?? ''
+    if (!groups.has(g)) groups.set(g, [])
+    groups.get(g)!.push({
+      label: `${c.label} (${c.count})`,
+      icon: `pi ${c.icon}`,
+      class: c.id === props.category ? 'cat-active' : '',
+      command: () => router.push(`/${props.provider}/${c.id}`),
+    })
+  }
+  return [...groups].map(([label, items]) => ({ label, items }))
+})
 </script>
 
 <template>
@@ -85,6 +94,8 @@ const menuModel = computed(() =>
   <div v-else class="layout">
     <aside class="side"><Menu :model="menuModel" /></aside>
     <section class="main">
+      <FileBrowser v-if="isFiles" :provider="provider" />
+      <template v-else>
       <div class="toolbar">
         <InputText v-model="search" placeholder="Search…" />
         <template v-for="f in filters" :key="f.key">
@@ -103,6 +114,7 @@ const menuModel = computed(() =>
         <span class="count">{{ items.length }} items</span>
       </div>
       <CosmeticGrid :key="provider.id + category" :provider="provider" :items="items" />
+      </template>
     </section>
   </div>
 </template>

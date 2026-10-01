@@ -3,6 +3,7 @@ import {
   DoubleSide,
   Euler,
   Float32BufferAttribute,
+  LinearMipmapLinearFilter,
   Group,
   Mesh,
   MeshLambertMaterial,
@@ -49,15 +50,17 @@ export function createTexture(bitmap: ImageBitmap): Texture {
   const tex = new Texture(bitmap as unknown as HTMLImageElement)
   tex.flipY = false
   tex.colorSpace = SRGBColorSpace
+  // Crisp pixels up close, mipmapped when minified so spinning cards don't shimmer.
   tex.magFilter = NearestFilter
-  tex.minFilter = NearestFilter
-  tex.generateMipmaps = false
+  tex.minFilter = LinearMipmapLinearFilter
+  tex.generateMipmaps = true
+  tex.anisotropy = 8
   tex.needsUpdate = true
   return tex
 }
 
 export function createMaterial(map: Texture) {
-  return new MeshLambertMaterial({ map, transparent: true, alphaTest: 0.05, side: DoubleSide })
+  return new MeshLambertMaterial({ map, alphaTest: 0.3, alphaToCoverage: true, side: DoubleSide })
 }
 
 function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
@@ -106,13 +109,24 @@ function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLamb
   return new Mesh(geo, material)
 }
 
-function rotationOf(rot?: [number, number, number]): Euler {
+export function rotationOf(rot?: [number, number, number]): Euler {
   // Bedrock rotates ZYX; X and Z are mirrored relative to three.js.
   return rot ? new Euler(-rot[0] * DEG, rot[1] * DEG, -rot[2] * DEG, 'ZYX') : new Euler()
 }
 
+export interface Bone {
+  group: Group
+  baseRot: [number, number, number]
+  basePos: [number, number, number]
+}
+
 /** Builds a three.js object from a Bedrock `minecraft:geometry` model (units: 1/16 block, scaled to blocks). */
 export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Object3D {
+  return buildGeoRig(geo, material).root
+}
+
+/** Like buildGeoModel, but also returns the bone groups so they can be animated. */
+export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root: Object3D; bones: Map<string, Bone> } {
   const g = geo['minecraft:geometry'][0]
   const texW = g.description.texture_width ?? 16
   const texH = g.description.texture_height ?? 16
@@ -125,12 +139,18 @@ export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Obje
   }
 
   const root = new Group()
+  const bones = new Map<string, Bone>()
   for (const bone of g.bones) {
     const group = groups.get(bone.name)!
     const pivot = pivots.get(bone.name)!
     const parentPivot = (bone.parent && pivots.get(bone.parent)) || [0, 0, 0]
     group.position.set(pivot[0] - parentPivot[0], pivot[1] - parentPivot[1], pivot[2] - parentPivot[2])
     group.rotation.copy(rotationOf(bone.rotation))
+    bones.set(bone.name, {
+      group,
+      baseRot: bone.rotation ?? [0, 0, 0],
+      basePos: [group.position.x, group.position.y, group.position.z],
+    })
     ;(bone.parent ? groups.get(bone.parent) : undefined)?.add(group)
     if (!bone.parent || !groups.has(bone.parent)) root.add(group)
 
@@ -156,5 +176,5 @@ export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Obje
     }
   }
   root.scale.setScalar(1 / 16)
-  return root
+  return { root, bones }
 }
