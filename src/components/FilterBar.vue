@@ -112,15 +112,15 @@ const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = 
 
   <Popover ref="filterPop">
     <div class="pop">
-      <Select :model-value="draft.field" :options="fieldOptions" option-label="label" option-value="value" :disabled="editing" @update:model-value="pickField" />
+      <Select append-to="self" :model-value="draft.field" :options="fieldOptions" option-label="label" option-value="value" :disabled="editing" @update:model-value="pickField" />
       <template v-if="draftDef">
-        <Select v-if="draftDef.type !== 'bool'" v-model="draft.op" :options="draftOps" option-label="label" option-value="op" />
-        <MultiSelect v-if="draftDef.type === 'multi'" v-model="draft.value" :options="draftDef.options" filter placeholder="Choose…" display="chip" class="val" />
+        <Select append-to="self" v-if="draftDef.type !== 'bool'" v-model="draft.op" :options="draftOps" option-label="label" option-value="op" />
+        <MultiSelect append-to="self" v-if="draftDef.type === 'multi'" v-model="draft.value" :options="draftDef.options" filter placeholder="Choose…" display="chip" class="val" />
         <ToggleSwitch v-else-if="draftDef.type === 'bool'" v-model="draft.value" />
         <InputText v-else-if="draftDef.type === 'text'" v-model="draft.value" class="val" @keyup.enter="saveFilter" />
         <template v-else-if="draftDef.type === 'date'">
-          <DatePicker :model-value="asDate(draft.value)" date-format="yy-mm-dd" show-icon @update:model-value="(d: any) => (draft.value = dayStart(d))" />
-          <DatePicker v-if="draft.op === 'between'" :model-value="asDate(draft.value2)" date-format="yy-mm-dd" show-icon @update:model-value="(d: any) => (draft.value2 = dayStart(d))" />
+          <DatePicker append-to="self" :model-value="asDate(draft.value)" date-format="yy-mm-dd" show-icon @update:model-value="(d: any) => (draft.value = dayStart(d))" />
+          <DatePicker append-to="self" v-if="draft.op === 'between'" :model-value="asDate(draft.value2)" date-format="yy-mm-dd" show-icon @update:model-value="(d: any) => (draft.value2 = dayStart(d))" />
         </template>
         <template v-else>
           <InputNumber v-model="draft.value" :use-grouping="false" class="val" @keyup.enter="saveFilter" />
@@ -135,7 +135,7 @@ const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = 
     <div class="pop sorts">
       <div v-for="(s, i) in sorts" :key="i" class="srow">
         <span class="n">{{ i === 0 ? 'Sort by' : 'then' }}</span>
-        <Select :model-value="s.field" :options="fieldOptions" option-label="label" option-value="value" @update:model-value="(v: string) => setSort(i, { field: v })" />
+        <Select append-to="self" :model-value="s.field" :options="fieldOptions" option-label="label" option-value="value" @update:model-value="(v: string) => setSort(i, { field: v })" />
         <Button :icon="s.dir === 'asc' ? 'pi pi-sort-amount-up-alt' : 'pi pi-sort-amount-down'" size="small" severity="secondary" :title="s.dir === 'asc' ? 'Ascending' : 'Descending'" @click="setSort(i, { dir: s.dir === 'asc' ? 'desc' : 'asc' })" />
         <Button icon="pi pi-arrow-up" size="small" text severity="secondary" :disabled="i === 0" @click="moveSort(i, -1)" />
         <Button icon="pi pi-arrow-down" size="small" text severity="secondary" :disabled="i === sorts.length - 1" @click="moveSort(i, 1)" />
