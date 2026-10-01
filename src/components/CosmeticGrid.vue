@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { CosmeticItem, CosmeticProvider } from '../providers/types'
 import { SharedRenderer } from '../three/sharedRenderer'
 import CosmeticCard from './CosmeticCard.vue'
 import CosmeticModal from './CosmeticModal.vue'
 
-defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number }>()
+const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number }>()
+const route = useRoute()
+const router = useRouter()
 
 const container = ref<HTMLElement>()
 const renderer = new SharedRenderer()
 provide('renderer', renderer)
-const selected = ref<CosmeticItem | null>(null)
+// The open item lives in the URL (?item=id) so a link opens it directly.
+const selected = computed<CosmeticItem | null>(() => {
+  const id = route.query.item
+  if (typeof id !== 'string') return null
+  return props.provider.itemById?.(id) ?? props.items.find((it) => it.id === id) ?? null
+})
+const openItem = (it: CosmeticItem) => router.replace({ query: { ...route.query, item: it.id } })
+function close() {
+  const { item: _, ...rest } = route.query
+  router.replace({ query: rest })
+}
 
 onMounted(() => renderer.attach(container.value!))
 onBeforeUnmount(() => renderer.detach())
@@ -19,10 +32,10 @@ onBeforeUnmount(() => renderer.detach())
 <template>
   <div ref="container" class="grid-wrap">
     <div class="grid" :style="{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }">
-      <CosmeticCard v-for="it in items" :key="it.id" :provider="provider" :item="it" @open="selected = it" />
+      <CosmeticCard v-for="it in items" :key="it.id" :provider="provider" :item="it" @open="openItem(it)" />
     </div>
   </div>
-  <CosmeticModal :provider="provider" :item="selected" @close="selected = null" />
+  <CosmeticModal :provider="provider" :item="selected" @close="close" />
 </template>
 
 <style scoped>

@@ -168,6 +168,13 @@ watch(state, (s) => model?.setState(s))
 watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
 onBeforeUnmount(teardown)
 
+const copied = ref(false)
+async function copyLink() {
+  await navigator.clipboard.writeText(location.href)
+  copied.value = true
+  setTimeout(() => (copied.value = false), 1500)
+}
+
 function togglePlay() {
   if (!timeline.value) return
   playing.value = !playing.value
@@ -258,6 +265,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
       </template>
       <Button v-if="imgSrc" label="Download image" icon="pi pi-download" size="small" @click="downloadUrl(imgSrc, imageName())" />
+      <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
       <Button v-if="raw" label="Download file" icon="pi pi-download" size="small" @click="downloadUrl(raw.url, raw.name)" />
     </div>
     <dl v-if="infoRows.length" class="info">

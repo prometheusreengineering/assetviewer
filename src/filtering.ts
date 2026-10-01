@@ -132,3 +132,34 @@ export function applyView(items: CosmeticItem[], search: string, rules: Rule[], 
   }
   return out
 }
+
+// ---- URL state (shareable links) -------------------------------------------
+
+/** Rules as base64url JSON of [field, op, value, value2?] tuples. */
+export function encodeRules(rules: Rule[]): string {
+  if (!rules.length) return ''
+  const json = JSON.stringify(rules.map((r) => (r.value2 === undefined ? [r.field, r.op, r.value] : [r.field, r.op, r.value, r.value2])))
+  return btoa(String.fromCharCode(...new TextEncoder().encode(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+export function decodeRules(s: string): Rule[] {
+  try {
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'))
+    const tuples = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))))
+    if (!Array.isArray(tuples)) return []
+    return tuples
+      .filter((t) => Array.isArray(t) && typeof t[0] === 'string' && typeof t[1] === 'string')
+      .map((t, i) => ({ id: i + 1, field: t[0], op: t[1], value: t[2], ...(t.length > 3 ? { value2: t[3] } : {}) }))
+  } catch {
+    return []
+  }
+}
+
+/** Sorts as `field:asc,field:desc`. */
+export const encodeSorts = (sorts: SortKey[]) => sorts.map((s) => `${s.field}:${s.dir}`).join(',')
+export const decodeSorts = (s: string): SortKey[] =>
+  s
+    .split(',')
+    .map((p) => p.split(':'))
+    .filter(([f, d]) => f && (d === 'asc' || d === 'desc'))
+    .map(([field, dir]) => ({ field: field!, dir: dir as SortKey['dir'] }))

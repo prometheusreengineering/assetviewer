@@ -5,18 +5,19 @@ import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import { computed, onBeforeUnmount, provide, ref, watch, watchEffect } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FilterBar from '../components/FilterBar.vue'
 import FileBrowser from '../components/FileBrowser.vue'
 import OutfitBuilder from '../components/OutfitBuilder.vue'
-import { applyView, type Rule, type SortKey } from '../filtering'
+import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rule, type SortKey } from '../filtering'
 import { providers } from '../providers'
 import { stats } from '../stats'
 import type { CategoryDef, CosmeticItem, FieldDef } from '../providers/types'
 
 const props = defineProps<{ provider: string; category?: string }>()
 const router = useRouter()
+const route = useRoute()
 const provider = computed(() => providers[props.provider]!)
 
 const ready = ref(false)
@@ -81,14 +82,27 @@ function loadSort(): SortKey[] {
 watch(
   () => props.category,
   () => {
-    search.value = ''
+    // A shared link (?q=&f=&s=) wins over the remembered sort.
+    const q = route.query
+    search.value = typeof q.q === 'string' ? q.q : ''
     animState.value = ''
     animStates.value = []
-    rules.value = []
-    sorts.value = loadSort()
+    rules.value = typeof q.f === 'string' ? decodeRules(q.f) : []
+    sorts.value = typeof q.s === 'string' ? decodeSorts(q.s) : loadSort()
     cancelMeasure()
   },
   { immediate: true },
+)
+// Keep the view in the URL so it can be shared (outfit/all-files pages manage their own query).
+watch(
+  [search, rules, sorts],
+  () => {
+    if (isTool.value || !props.category) return
+    const next = { ...route.query, q: search.value || undefined, f: encodeRules(rules.value) || undefined, s: encodeSorts(sorts.value) || undefined }
+    if (next.q === route.query.q && next.f === route.query.f && next.s === route.query.s) return
+    router.replace({ query: next })
+  },
+  { deep: true },
 )
 watch(sorts, (v) => {
   try {

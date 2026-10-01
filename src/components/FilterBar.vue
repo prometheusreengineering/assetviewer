@@ -24,7 +24,8 @@ const fieldOptions = computed(() => props.fields.map((f) => ({ label: f.label, v
 const filterPop = ref<InstanceType<typeof Popover>>()
 const draft = ref<Rule>({ id: 0, field: '', op: 'contains', value: '' })
 const editing = ref(false)
-let nextId = 1
+// Rules can also come from a link, so new ids continue after the existing ones.
+const nextId = () => Math.max(0, ...rules.value.map((r) => r.id)) + 1
 
 const draftDef = computed(() => byKey.value.get(draft.value.field))
 const draftOps = computed(() => (draftDef.value ? OPS[draftDef.value.type] : []))
@@ -34,7 +35,7 @@ const dayStart = (d: Date | null) => (d ? new Date(d.getFullYear(), d.getMonth()
 function blank(field: string): Rule {
   const def = byKey.value.get(field)!
   const value = def.type === 'multi' ? [] : def.type === 'bool' ? true : def.type === 'text' ? '' : null
-  return { id: nextId++, field, op: OPS[def.type][0]!.op, value }
+  return { id: nextId(), field, op: OPS[def.type][0]!.op, value }
 }
 function openFilter(e: Event, rule?: Rule) {
   editing.value = !!rule
