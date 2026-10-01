@@ -11,8 +11,8 @@ import AnimatedImage from './AnimatedImage.vue'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import type { SharedRenderer, Slot } from '../three/sharedRenderer'
 
-const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem }>()
-defineEmits<{ open: [] }>()
+const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem; comparing?: boolean }>()
+defineEmits<{ open: []; compare: [] }>()
 
 const renderer = inject<SharedRenderer>('renderer')!
 // Grid-wide animation state chosen in the toolbar, and the states discovered so far.
@@ -107,6 +107,9 @@ onBeforeUnmount(() => {
       <i v-else-if="state === 'error'" class="pi pi-exclamation-triangle" title="Failed to load" />
     </div>
     <div class="name" :title="item.name">{{ item.name }}</div>
+    <button class="cmp" :class="{ on: comparing }" :title="comparing ? 'Remove from compare' : 'Add to compare'" @click.stop="$emit('compare')">
+      <i class="pi pi-clone" />
+    </button>
     <button class="star" :class="{ on: fav }" :title="fav ? 'Remove from Favorites' : 'Add to Favorites'" @click.stop="collections.toggle(FAV, item.id)">
       <i :class="fav ? 'pi pi-star-fill' : 'pi pi-star'" />
     </button>
@@ -117,7 +120,9 @@ onBeforeUnmount(() => {
 .card { position: relative; background: var(--p-surface-900); border: 1px solid var(--p-surface-800); border-radius: 10px; cursor: pointer; overflow: hidden; content-visibility: auto; contain-intrinsic-size: 190px 230px; }
 .card:hover { border-color: var(--p-primary-color); }
 .star { position: absolute; top: 0.4rem; right: 0.4rem; border: 0; background: color-mix(in srgb, var(--p-surface-950) 70%, transparent); color: var(--p-surface-300); border-radius: 50%; width: 1.9rem; height: 1.9rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
-.card:hover .star, .star.on { opacity: 1; }
+.cmp { position: absolute; top: 0.4rem; left: 0.4rem; border: 0; background: color-mix(in srgb, var(--p-surface-950) 70%, transparent); color: var(--p-surface-300); border-radius: 50%; width: 1.9rem; height: 1.9rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.cmp.on { color: var(--p-primary-color); }
+.card:hover .star, .star.on, .card:hover .cmp, .cmp.on { opacity: 1; }
 .star.on { color: #f5c542; }
 .view { position: relative; aspect-ratio: 1; display: grid; place-items: center; }
 .view .pi-exclamation-triangle { opacity: 0.4; }
