@@ -3,8 +3,9 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
+import vTooltip from 'primevue/tooltip'
 import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue'
-import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
+import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
@@ -33,6 +34,7 @@ let controls: TrackballControls | undefined
 let raf = 0
 let token = 0
 const animState = inject<Ref<string> | undefined>('animState', undefined)
+const HELP = ['Rotate: drag', 'Move: Shift + drag (or right-drag)', 'Zoom: mouse wheel'].join(String.fromCharCode(10))
 const dimTick = ref(0)
 const infoRows = computed(() => (dimTick.value >= 0 && props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
 const shown = shallowRef<CosmeticItem | null>(null)
@@ -104,7 +106,13 @@ async function open(item: CosmeticItem) {
     // Trackball controls rotate freely (no pole clamp, can flip upside down), unlike OrbitControls.
     const c = new TrackballControls(camera, r.domElement)
     controls = c
-    c.noPan = true
+    c.panSpeed = 0.1
+    // Shift + drag moves the model (right-drag also pans; the wheel zooms).
+    r.domElement.addEventListener(
+      'pointerdown',
+      (e) => (c.mouseButtons.LEFT = e.shiftKey ? MOUSE.PAN : MOUSE.ROTATE),
+      { capture: true },
+    )
     c.rotateSpeed = 3
     c.dynamicDampingFactor = 0.1
     c.minDistance = 2
@@ -182,6 +190,10 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
       <template v-if="hasModel">
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
+        <i
+          v-tooltip.top="{ value: HELP, class: 'help-tip' }"
+          class="pi pi-question-circle help"
+        />
         <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
         <Button label="ZIP (source files)" icon="pi pi-download" size="small" @click="downloadZip" />
         <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
@@ -205,10 +217,15 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .busy { position: absolute; inset: 0; margin: auto; width: 2rem; height: 2rem; font-size: 2rem; }
 .err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
 .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.help { cursor: help; opacity: 0.6; font-size: 1.1rem; }
+.help:hover { opacity: 1; }
 label { display: flex; align-items: center; gap: 0.5rem; }
 .info { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 2rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
 .pair { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0 0.75rem; min-width: 0; }
 .pair.wide { grid-column: 1 / -1; }
 .info dt { opacity: 0.6; }
 .info dd { margin: 0; word-break: break-all; }
+</style>
+<style>
+.help-tip { white-space: pre-line; }
 </style>
