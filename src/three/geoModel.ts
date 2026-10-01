@@ -1,0 +1,160 @@
+import {
+  BoxGeometry,
+  DoubleSide,
+  Euler,
+  Float32BufferAttribute,
+  Group,
+  Mesh,
+  MeshLambertMaterial,
+  NearestFilter,
+  Object3D,
+  SRGBColorSpace,
+  Texture,
+} from 'three'
+
+interface FaceUv {
+  uv: [number, number]
+  uv_size?: [number, number]
+}
+interface GeoCube {
+  origin: [number, number, number]
+  size: [number, number, number]
+  inflate?: number
+  pivot?: [number, number, number]
+  rotation?: [number, number, number]
+  mirror?: boolean
+  uv?: [number, number] | Partial<Record<'north' | 'south' | 'east' | 'west' | 'up' | 'down', FaceUv>>
+}
+interface GeoBone {
+  name: string
+  parent?: string
+  pivot?: [number, number, number]
+  rotation?: [number, number, number]
+  mirror?: boolean
+  cubes?: GeoCube[]
+}
+export interface GeoFile {
+  'minecraft:geometry': {
+    description: { texture_width?: number; texture_height?: number }
+    bones: GeoBone[]
+  }[]
+}
+
+const DEG = Math.PI / 180
+// Three.js BoxGeometry face order: +x, -x, +y, -y, +z, -z
+const FACE_ORDER = ['east', 'west', 'up', 'down', 'south', 'north'] as const
+type Face = (typeof FACE_ORDER)[number]
+
+export function createTexture(bitmap: ImageBitmap): Texture {
+  const tex = new Texture(bitmap as unknown as HTMLImageElement)
+  tex.flipY = false
+  tex.colorSpace = SRGBColorSpace
+  tex.magFilter = NearestFilter
+  tex.minFilter = NearestFilter
+  tex.generateMipmaps = false
+  tex.needsUpdate = true
+  return tex
+}
+
+export function createMaterial(map: Texture) {
+  return new MeshLambertMaterial({ map, transparent: true, alphaTest: 0.05, side: DoubleSide })
+}
+
+function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
+  const [w, h, d] = cube.size.map(Math.floor) as [number, number, number]
+  const rects = {} as Record<Face, [number, number, number, number]>
+  if (Array.isArray(cube.uv)) {
+    const [u, v] = cube.uv
+    rects.north = [u + d, v + d, w, h]
+    rects.east = [u, v + d, d, h]
+    rects.south = [u + d + w + d, v + d, w, h]
+    rects.west = [u + d + w, v + d, d, h]
+    rects.up = [u + d, v, w, d]
+    rects.down = [u + d + w, v + d, w, -d]
+    if (cube.mirror) {
+      for (const f of Object.keys(rects) as Face[]) {
+        const [fu, fv, fw, fh] = rects[f]
+        rects[f] = [fu + fw, fv, -fw, fh]
+      }
+      ;[rects.east, rects.west] = [rects.west, rects.east]
+    }
+  } else if (cube.uv) {
+    for (const f of FACE_ORDER) {
+      const fu = cube.uv[f]
+      if (fu) rects[f] = [fu.uv[0], fu.uv[1], fu.uv_size?.[0] ?? 0, fu.uv_size?.[1] ?? 0]
+    }
+  }
+  return rects
+}
+
+function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial): Mesh {
+  const inf = cube.inflate ?? 0
+  const geo = new BoxGeometry(cube.size[0] + inf * 2, cube.size[1] + inf * 2, cube.size[2] + inf * 2)
+  const rects = faceRects(cube)
+  const uvs: number[] = []
+  for (const f of FACE_ORDER) {
+    const r = rects[f]
+    if (!r) {
+      uvs.push(0, 0, 0, 0, 0, 0, 0, 0)
+      continue
+    }
+    const [u, v, w, h] = r
+    // vertex order per face as seen from outside: TL, TR, BL, BR
+    uvs.push(u / texW, v / texH, (u + w) / texW, v / texH, u / texW, (v + h) / texH, (u + w) / texW, (v + h) / texH)
+  }
+  geo.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+  return new Mesh(geo, material)
+}
+
+function rotationOf(rot?: [number, number, number]): Euler {
+  // Bedrock rotates ZYX; X and Z are mirrored relative to three.js.
+  return rot ? new Euler(-rot[0] * DEG, rot[1] * DEG, -rot[2] * DEG, 'ZYX') : new Euler()
+}
+
+/** Builds a three.js object from a Bedrock `minecraft:geometry` model (units: 1/16 block, scaled to blocks). */
+export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Object3D {
+  const g = geo['minecraft:geometry'][0]
+  const texW = g.description.texture_width ?? 16
+  const texH = g.description.texture_height ?? 16
+
+  const groups = new Map<string, Group>()
+  const pivots = new Map<string, [number, number, number]>()
+  for (const bone of g.bones) {
+    groups.set(bone.name, new Group())
+    pivots.set(bone.name, bone.pivot ?? [0, 0, 0])
+  }
+
+  const root = new Group()
+  for (const bone of g.bones) {
+    const group = groups.get(bone.name)!
+    const pivot = pivots.get(bone.name)!
+    const parentPivot = (bone.parent && pivots.get(bone.parent)) || [0, 0, 0]
+    group.position.set(pivot[0] - parentPivot[0], pivot[1] - parentPivot[1], pivot[2] - parentPivot[2])
+    group.rotation.copy(rotationOf(bone.rotation))
+    ;(bone.parent ? groups.get(bone.parent) : undefined)?.add(group)
+    if (!bone.parent || !groups.has(bone.parent)) root.add(group)
+
+    for (const cube of bone.cubes ?? []) {
+      const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material)
+      const center = [
+        cube.origin[0] + cube.size[0] / 2,
+        cube.origin[1] + cube.size[1] / 2,
+        cube.origin[2] + cube.size[2] / 2,
+      ]
+      if (cube.rotation) {
+        const cp = cube.pivot ?? [0, 0, 0]
+        const holder = new Group()
+        holder.position.set(cp[0] - pivot[0], cp[1] - pivot[1], cp[2] - pivot[2])
+        holder.rotation.copy(rotationOf(cube.rotation))
+        mesh.position.set(center[0] - cp[0], center[1] - cp[1], center[2] - cp[2])
+        holder.add(mesh)
+        group.add(holder)
+      } else {
+        mesh.position.set(center[0] - pivot[0], center[1] - pivot[1], center[2] - pivot[2])
+        group.add(mesh)
+      }
+    }
+  }
+  root.scale.setScalar(1 / 16)
+  return root
+}
