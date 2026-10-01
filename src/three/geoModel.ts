@@ -135,7 +135,9 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root
   const groups = new Map<string, Group>()
   const pivots = new Map<string, [number, number, number]>()
   for (const bone of g.bones) {
-    groups.set(bone.name, new Group())
+    const group = new Group()
+    group.name = bone.name
+    groups.set(bone.name, group)
     pivots.set(bone.name, bone.pivot ?? [0, 0, 0])
   }
 

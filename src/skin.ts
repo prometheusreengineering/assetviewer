@@ -14,6 +14,10 @@ watch(skinName, (v) => {
   } catch {}
 })
 
+// Modal "Show on player" preferences, kept while browsing.
+export const showOnPlayer = ref(false)
+export const playerEmoteId = ref<string | null>(null)
+
 type Rect = [number, number, number, number]
 function fill(g: OffscreenCanvasRenderingContext2D, color: string, ...rects: Rect[]) {
   g.fillStyle = color

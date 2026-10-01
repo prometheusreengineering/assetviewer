@@ -3,7 +3,7 @@ import { buildSkeleton, poseSkeleton, skinnedMesh, type BobjAction, type BobjFil
 import { disposeObject } from './fit'
 import { createMaterial, createTexture } from './geoModel'
 
-/** A skinned Minecraft player built from the emote body (.bobj), in Bedrock pixels (feet at y=0, 32 tall). */
+/** A skinned Minecraft player built from the emote body (.bobj), in blocks (feet at y=0, 2 tall) like raw cosmetics. */
 export interface Player {
   object: Group
   skel: BobjSkeleton
@@ -17,8 +17,6 @@ export interface Player {
 export function createPlayer(body: BobjFile, skin: ImageBitmap): Player {
   const skel = buildSkeleton(body.bones)
   const object = new Group()
-  // .bobj units are blocks; gek cosmetics use pixels.
-  object.scale.setScalar(16)
   const materials: Material[] = []
   const textures: Texture[] = []
   const material = (bitmap: ImageBitmap) => {

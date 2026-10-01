@@ -93,7 +93,12 @@ export interface CosmeticProvider {
   imageUrl(item: CosmeticItem): Promise<string>
   /** Frame layout (px) for stacked-frame images, if the item is animated. */
   imageFrames?(item: CosmeticItem): Promise<{ frameW?: number; frameH?: number; frametimeMs: number } | undefined>
-  loadModel(item: CosmeticItem): Promise<LoadedModel>
+  /** `raw` keeps player-space coordinates (unfitted) for dressing a player. */
+  loadModel(item: CosmeticItem, opts?: { raw?: boolean }): Promise<LoadedModel>
+  /** A player wearing `items`, optionally playing an emote item. */
+  dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem): Promise<LoadedModel>
+  /** Looks up any item by id (deep links, collections). */
+  itemById?(id: string): CosmeticItem | undefined
   /** Non-visual file items. */
   rawFile?(item: CosmeticItem): Promise<RawFile>
   /** Every file in the CDN index. */

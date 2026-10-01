@@ -156,6 +156,8 @@ export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf):
     for (const p of props) p.mesh.visible = tick >= p.showAt
   }
   apply(0)
+  // The player faces +z; the camera looks from -z.
+  player.object.rotation.y = Math.PI
   const object = fitObject(player.object)
   const { timeline, tick } = emoteTimeline(duration, !!em.looping, apply)
   return {

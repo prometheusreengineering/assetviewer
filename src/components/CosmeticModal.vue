@@ -13,7 +13,7 @@ import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
-import { skinName } from '../skin'
+import { playerEmoteId, showOnPlayer, skinName } from '../skin'
 import AnimatedImage from './AnimatedImage.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
@@ -34,7 +34,12 @@ const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
 const skinDraft = ref(skinName.value)
-const usesSkin = computed(() => shown.value?.category === 'emotes')
+const isEmote = computed(() => shown.value?.category === 'emotes')
+// Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
+const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
+const dressed = computed(() => canDress.value && showOnPlayer.value)
+const usesSkin = computed(() => isEmote.value || dressed.value)
+const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
@@ -86,8 +91,9 @@ async function open(item: CosmeticItem) {
       imgSrc.value = await props.provider.imageUrl(item)
       return
     }
+    const emote = playerEmoteId.value ? props.provider.itemById?.(playerEmoteId.value) : undefined
     const [loaded, { TrackballControls }] = await Promise.all([
-      props.provider.loadModel(item),
+      dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item),
       import('three/examples/jsm/controls/TrackballControls.js'),
     ])
     await nextTick()
@@ -159,6 +165,7 @@ watch(wireframe, (w) => {
   })
 })
 watch(state, (s) => model?.setState(s))
+watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
 onBeforeUnmount(teardown)
 
 function togglePlay() {
@@ -227,6 +234,20 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           class="pi pi-question-circle help"
         />
         <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
+        <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
+        <Select
+          v-if="dressed"
+          v-model="playerEmoteId"
+          :options="emoteOptions"
+          option-label="label"
+          option-value="value"
+          filter
+          show-clear
+          size="small"
+          placeholder="Pose: standing"
+          class="pose"
+          title="Play an emote while wearing it"
+        />
         <template v-if="timeline">
           <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded :title="playing ? 'Pause' : 'Play'" @click="togglePlay" />
           <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
@@ -258,6 +279,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .scrub { width: 10rem; }
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
 .skin { width: 13rem; }
+.pose { width: 12rem; }
 .help { cursor: help; opacity: 0.6; font-size: 1.1rem; }
 .help:hover { opacity: 1; }
 label { display: flex; align-items: center; gap: 0.5rem; }

@@ -1,5 +1,5 @@
 import { zipSync } from 'fflate'
-import type { MeshLambertMaterial } from 'three'
+import { Group, type MeshLambertMaterial } from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { fileUrl, getFileBuffer, getFileJson, getFileText } from '../../cdn'
 import { AnimationPlayer, type AnimFile } from '../../three/animation/bedrockAnim'
@@ -9,6 +9,7 @@ import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } f
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { LUNAR_INDEXES } from '../../config'
 import { fetchImageSize } from '../../dimensions'
+import { dressPlayer } from './dress'
 import { loadEmote } from './emotes'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
@@ -163,6 +164,7 @@ async function buildRig(
   animFile: AnimFile | undefined,
   preferred: string[],
   files: DownloadFile[],
+  raw = false,
 ): Promise<Rig> {
   const bitmap = await toBitmap(texBuf, false)
   const tex = createTexture(bitmap)
@@ -173,7 +175,8 @@ async function buildRig(
   tex.repeat.y = 1 / frames
   const material = createMaterial(tex)
   const { root, bones } = buildGeoRig(geo, material)
-  const object = fitObject(root)
+  // raw: keep player-space coordinates (blocks) for dressing a player.
+  const object = raw ? root : fitObject(root)
   const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
   return { object, material, bones, player, frames, frameMs: mc?.frametimeMs ?? 125, baseOffset: 0, dir: 1, files }
 }
@@ -192,7 +195,7 @@ async function loadAnim(path: string | undefined): Promise<{ anim?: AnimFile; fi
   return { file, anim: JSON.parse(new TextDecoder().decode(file!.data)) as AnimFile }
 }
 
-async function loadGek(entry: LunarEntry): Promise<LoadedModel> {
+async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedModel> {
   const gekHash = hashOf(entry.path)
   const raw = await getFileJson<{ model?: string | Record<string, string>; texture?: string; animation?: string; state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] } }>(gekHash)
   // `model` may map several geometries to conditions (normal / slim arms); use the default one.
@@ -215,11 +218,11 @@ async function loadGek(entry: LunarEntry): Promise<LoadedModel> {
   // Default pose: idle, else whatever the state machine plays unconditionally (plays_when "1"), e.g. auras' "main".
   const states = (raw.state_machine?.controllers ?? []).flatMap((c) => c.states ?? [])
   const preferred = ['idle', ...states.filter((x) => String(x.plays_when).trim() === '1').map((x) => x.anim), 'main']
-  return finish(await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files))
+  return finish(await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files, playerSpace))
 }
 
 /** Legacy flat wings: a plain webp drawn on the shared simple_2d_wings model. */
-async function loadWing2d(entry: LunarEntry): Promise<LoadedModel> {
+async function loadWing2d(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   const geoRel = 'cosmetics/models/gek/wings/simple_2d_wings.geo.json'
   const animRel = 'cosmetics/models/gek/wings/simple_2d_wings.anim.json'
   const [geo, texBuf, { anim, file }] = await Promise.all([
@@ -232,7 +235,7 @@ async function loadWing2d(entry: LunarEntry): Promise<LoadedModel> {
     { name: baseName(geoRel), data: new TextEncoder().encode(JSON.stringify(geo)) },
   ]
   if (file) files.push(file)
-  return finish(await buildRig(geo, texBuf, entry.path, anim, ['main'], files))
+  return finish(await buildRig(geo, texBuf, entry.path, anim, ['main'], files, raw))
 }
 
 // Lunar cloaks use the OptiFine layout: a 22x17 base grid (scaled by any integer), cape box 10x16x1 at uv 0,0.
@@ -245,13 +248,23 @@ const CAPE_GEO: GeoFile = {
   ],
 }
 
-async function loadCloak(entry: LunarEntry): Promise<LoadedModel> {
-  const texBuf = await getFileBuffer(hashOf(entry.path))
-  const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
-  return finish(await buildRig(CAPE_GEO, texBuf, entry.path, undefined, [], files))
+// The same cape hung from the shoulders behind a player (bone named so it follows the torso).
+const CAPE_ON_PLAYER: GeoFile = {
+  'minecraft:geometry': [
+    {
+      description: { texture_width: 22, texture_height: 17 },
+      bones: [{ name: 'bipedBody', pivot: [0, 24, 0], rotation: [6, 180, 0], cubes: [{ origin: [-5, 8, 2.1], size: [10, 16, 1], uv: [0, 0] }] }],
+    },
+  ],
 }
 
-async function loadObj(entry: LunarEntry): Promise<LoadedModel> {
+async function loadCloak(entry: LunarEntry, raw = false): Promise<LoadedModel> {
+  const texBuf = await getFileBuffer(hashOf(entry.path))
+  const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
+  return finish(await buildRig(raw ? CAPE_ON_PLAYER : CAPE_GEO, texBuf, entry.path, undefined, [], files, raw))
+}
+
+async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   const objPath = catalog!.objs.get(entry.modelKey)
   if (!objPath) throw new Error(`No OBJ for ${entry.modelKey}`)
   const [objBuf, texBuf, mc] = await Promise.all([
@@ -265,7 +278,11 @@ async function loadObj(entry: LunarEntry): Promise<LoadedModel> {
   tex.repeat.y = 1 / frames
   tex.offset.y = 1 - 1 / frames
   const material = createMaterial(tex)
-  const obj = new OBJLoader().parse(new TextDecoder().decode(objBuf))
+  const parsedObj = new OBJLoader().parse(new TextDecoder().decode(objBuf))
+  // Java model space is y-down (rendered with scale -1,-1,1): turn it upright.
+  const obj = new Group()
+  obj.add(parsedObj)
+  parsedObj.rotation.z = Math.PI
   obj.traverse((o) => {
     if ('material' in o) (o as unknown as { material: MeshLambertMaterial }).material = material
   })
@@ -274,7 +291,7 @@ async function loadObj(entry: LunarEntry): Promise<LoadedModel> {
     { name: baseName(entry.path), data: new Uint8Array(texBuf) },
   ]
   return finish({
-    object: fitObject(obj),
+    object: raw ? obj : fitObject(obj),
     material,
     frames,
     frameMs: mc?.frametimeMs ?? 125,
@@ -423,14 +440,23 @@ export const lunarProvider: CosmeticProvider = {
     return mcmetaFor(byId.get(item.id)!.path)
   },
 
-  loadModel(item) {
+  loadModel(item, opts) {
     const e = byId.get(item.id)!
-    if (e.kind === 'gek') return loadGek(e)
-    if (e.kind === 'wing2d') return loadWing2d(e)
-    if (e.kind === 'cloak') return loadCloak(e)
+    const raw = !!opts?.raw
+    if (e.kind === 'gek') return loadGek(e, raw)
+    if (e.kind === 'wing2d') return loadWing2d(e, raw)
+    if (e.kind === 'cloak') return loadCloak(e, raw)
     if (e.kind === 'emote') return loadEmote(catalog!.emotes!.emotes.find((x) => x.id === item.fields.id)!, catalog!.emotes!, hashOf)
-    return loadObj(e)
+    return loadObj(e, raw)
   },
+
+  dressPlayer(items, emote) {
+    const entries = items.map((it) => byId.get(it.id)).filter((e): e is LunarEntry => !!e && e.kind !== 'image' && e.kind !== 'file' && e.kind !== 'emote')
+    const em = emote ? catalog!.emotes?.emotes.find((x) => x.id === emote.fields.id) : undefined
+    return dressPlayer(entries, em, catalog!.emotes, hashOf, (e) => lunarProvider.loadModel(e.item, { raw: true }))
+  },
+
+  itemById: (id) => byId.get(id)?.item,
 
   async rawFile(item) {
     const e = byId.get(item.id)!
