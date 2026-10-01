@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
+import Slider from 'primevue/slider'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import vTooltip from 'primevue/tooltip'
@@ -10,7 +12,8 @@ import type { TrackballControls } from 'three/examples/jsm/controls/TrackballCon
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
-import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile } from '../providers/types'
+import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
+import { skinName } from '../skin'
 import AnimatedImage from './AnimatedImage.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
@@ -27,6 +30,11 @@ const autoRotate = ref(true)
 const hasModel = ref(false)
 const states = ref<string[]>([])
 const state = ref('')
+const timeline = shallowRef<Timeline>()
+const tlTime = ref(0)
+const playing = ref(true)
+const skinDraft = ref(skinName.value)
+const usesSkin = computed(() => shown.value?.category === 'emotes')
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
@@ -55,6 +63,9 @@ function teardown() {
   raw.value = undefined
   states.value = []
   state.value = ''
+  timeline.value = undefined
+  tlTime.value = 0
+  playing.value = true
   error.value = ''
 }
 
@@ -88,6 +99,7 @@ async function open(item: CosmeticItem) {
     model = loaded
     hasModel.value = true
     states.value = loaded.states
+    timeline.value = loaded.timeline
     const wanted = animState?.value
     if (wanted && loaded.states.includes(wanted)) loaded.setState(wanted)
     state.value = loaded.state
@@ -124,6 +136,9 @@ async function open(item: CosmeticItem) {
       last = ms
       c.update()
       loaded.tick(ms)
+      // Only refresh the scrubber when it visibly moves.
+      const tl = loaded.timeline
+      if (tl && Math.abs(tl.time - tlTime.value) >= 0.05) tlTime.value = Math.round(tl.time * 20) / 20
       r.render(scene, camera)
     }
     raf = requestAnimationFrame(loop)
@@ -145,6 +160,23 @@ watch(wireframe, (w) => {
 })
 watch(state, (s) => model?.setState(s))
 onBeforeUnmount(teardown)
+
+function togglePlay() {
+  if (!timeline.value) return
+  playing.value = !playing.value
+  timeline.value.paused = !playing.value
+}
+function seek(v: number | number[]) {
+  const t = Array.isArray(v) ? v[0]! : v
+  tlTime.value = t
+  timeline.value?.seek(t)
+}
+function applySkin() {
+  const v = skinDraft.value.trim()
+  if (v === skinName.value) return
+  skinName.value = v
+  if (shown.value) open(shown.value)
+}
 
 const slug = () => (shown.value?.name ?? 'item').toLowerCase().replace(/[^a-z0-9]+/g, '_')
 
@@ -195,6 +227,12 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           class="pi pi-question-circle help"
         />
         <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
+        <template v-if="timeline">
+          <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded :title="playing ? 'Pause' : 'Play'" @click="togglePlay" />
+          <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
+          <span class="time">{{ tlTime.toFixed(1) }} / {{ timeline.duration.toFixed(1) }} s</span>
+        </template>
+        <InputText v-if="usesSkin" v-model="skinDraft" size="small" placeholder="Skin (Minecraft username)" class="skin" title="Loads the skin from mc-heads.net; empty = placeholder" @keyup.enter="applySkin" @blur="applySkin" />
         <Button label="ZIP (source files)" icon="pi pi-download" size="small" @click="downloadZip" />
         <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
       </template>
@@ -217,6 +255,9 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .busy { position: absolute; inset: 0; margin: auto; width: 2rem; height: 2rem; font-size: 2rem; }
 .err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
 .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.scrub { width: 10rem; }
+.time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
+.skin { width: 13rem; }
 .help { cursor: help; opacity: 0.6; font-size: 1.1rem; }
 .help:hover { opacity: 1; }
 label { display: flex; align-items: center; gap: 0.5rem; }

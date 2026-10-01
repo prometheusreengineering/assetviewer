@@ -7,7 +7,7 @@ export const PREFIX = 'assets/lunar/'
 /** Cape textures sit directly in cosmetics/cloaks (subfolders hold extras). */
 const isCloakTex = (p: string) => /^cosmetics\/cloaks\/[^/]+\.webp$/.test(p)
 
-export type Kind = 'gek' | 'obj' | 'wing2d' | 'cloak' | 'image' | 'file'
+export type Kind = 'gek' | 'obj' | 'wing2d' | 'cloak' | 'emote' | 'image' | 'file'
 
 export interface LunarEntry {
   item: CosmeticItem
@@ -28,6 +28,24 @@ export interface LunarCatalog {
   entries: LunarEntry[]
   /** folder name -> full path of the .obj inside it */
   objs: Map<string, string>
+  emotes?: EmotesJson
+}
+
+export interface EmoteDef {
+  id: number
+  name: string
+  duration: number
+  looping?: boolean
+  author?: string
+  morph?: string
+  meshes?: { name: string; show_at: number }[]
+  particleEffect?: string
+}
+export interface EmotesJson {
+  props: string[]
+  actions: string[]
+  meshes: Record<string, { visible?: boolean; texture?: string }>
+  emotes: EmoteDef[]
 }
 
 interface JsonCosmetic {
@@ -274,5 +292,40 @@ export async function loadLunarCatalog(): Promise<LunarCatalog> {
     })
   }
 
-  return { files, sizes, entries, objs }
+  // 5. Emotes (Blockbuster .bobj, played on a player body). Their files stay listed as resources too, so
+  // these entries claim nothing.
+  let emotes: EmotesJson | undefined
+  const emotesHash = files.get(PREFIX + 'emotes/emotes.json')
+  if (emotesHash) {
+    emotes = await getFileJson<EmotesJson>(emotesHash)
+    for (const em of emotes.emotes) {
+      const icon = `emotes/icons/${em.id}.webp`
+      entries.push({
+        // The icon path (absent for a few new emotes, which then show their name only).
+        path: icon,
+        modelKey: '',
+        kind: 'emote',
+        item: {
+          id: 'emote:' + em.id,
+          name: humanize(em.name),
+          category: 'emotes',
+          render: '3d',
+          thumb: has(icon) ? 'image' : 'none',
+          fields: {
+            themes: [],
+            colors: [],
+            id: em.id,
+            duration: Math.round((em.duration / 20) * 10) / 10,
+            looping: !!em.looping,
+            author: em.author ?? '',
+            props: (em.meshes ?? []).map((m) => m.name),
+            ...(em.morph ? { morph: em.morph } : {}),
+          },
+        },
+        info: { Action: 'emote_' + em.name, ...(em.particleEffect ? { 'Particle effect': em.particleEffect } : {}) },
+      })
+    }
+  }
+
+  return { files, sizes, entries, objs, emotes }
 }

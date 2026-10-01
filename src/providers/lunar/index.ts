@@ -9,6 +9,7 @@ import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } f
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { LUNAR_INDEXES } from '../../config'
 import { fetchImageSize } from '../../dimensions'
+import { loadEmote } from './emotes'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
 const COSMETIC_LABELS: Record<string, [string, string]> = {
@@ -33,6 +34,7 @@ const COSMETIC_LABELS: Record<string, [string, string]> = {
   shovel: ['Shovels', 'pi-wrench'],
   hand: ['Hand items', 'pi-hammer'],
   items: ['Items', 'pi-box'],
+  emotes: ['Emotes', 'pi-video'],
 }
 
 const RESOURCE_LABELS: Record<string, [string, string]> = {
@@ -298,12 +300,17 @@ function blobUrl(path: string): Promise<string> {
 }
 
 /** Entries whose main file is an image whose header can be read for width/height. */
-const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'file' && /\.(webp|png|gif)$/i.test(e.path)
+const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'file' && e.kind !== 'emote' && /\.(webp|png|gif)$/i.test(e.path)
 
 /** Fills the catalog-wide fields (id, size, path, folder, ...) used by the filter and sort bar. */
 function enrich(c: LunarCatalog) {
   for (const e of c.entries) {
     const f = e.item.fields
+    if (e.kind === 'emote') {
+      // Emotes span several shared files; path/size of the icon would mislead.
+      f.type = '3D'
+      continue
+    }
     const ext = e.path.split('.').pop() ?? ''
     if (/^\d+$/.test(e.item.id)) f.id = Number(e.item.id)
     f.path = e.path
@@ -374,6 +381,11 @@ export const lunarProvider: CosmeticProvider = {
     if (list.some((it) => measurable(byId.get(it.id)))) {
       out.push({ key: 'width', label: 'Image width (px)', type: 'number', lazy: true }, { key: 'height', label: 'Image height (px)', type: 'number', lazy: true })
     }
+    add('duration', 'Duration (s)', 'number')
+    add('looping', 'Looping', 'bool')
+    add('author', 'Author', 'multi', { options: opts('author') })
+    add('props', 'Props', 'multi', { options: opts('props') })
+    add('morph', 'Morph', 'multi', { options: opts('morph') })
     add('animated', 'Animated', 'bool')
     add('special', 'Special', 'bool')
     add('model', 'Has 3D model', 'bool')
@@ -416,6 +428,7 @@ export const lunarProvider: CosmeticProvider = {
     if (e.kind === 'gek') return loadGek(e)
     if (e.kind === 'wing2d') return loadWing2d(e)
     if (e.kind === 'cloak') return loadCloak(e)
+    if (e.kind === 'emote') return loadEmote(catalog!.emotes!.emotes.find((x) => x.id === item.fields.id)!, catalog!.emotes!, hashOf)
     return loadObj(e)
   },
 
@@ -469,6 +482,11 @@ export const lunarProvider: CosmeticProvider = {
       Released: typeof f.released === 'number' ? new Date(f.released).toISOString().slice(0, 10) : undefined,
       Themes: list(f.themes),
       Colors: list(f.colors),
+      Duration: typeof f.duration === 'number' ? `${f.duration} s` : undefined,
+      Looping: yn(f.looping),
+      Author: f.author ? String(f.author) : undefined,
+      Props: list(f.props),
+      Morph: f.morph ? String(f.morph) : undefined,
       Animated: yn(f.animated),
       Special: yn(f.special),
       'File type': f.ext ? String(f.ext) : undefined,

@@ -32,11 +32,12 @@ async function activate() {
   if (state.value !== 'idle') return
   state.value = 'loading'
   try {
-    if (props.item.render === 'file') {
+    if (props.item.render === 'file' || props.item.thumb === 'none') {
       state.value = 'ready'
       return
     }
-    if (props.item.render === 'image') {
+    // Some 3D items (emotes) use their icon as the card thumbnail; the model loads in the modal.
+    if (props.item.render === 'image' || props.item.thumb === 'image') {
       frames.value = props.item.fields.animated ? await props.provider.imageFrames?.(props.item) : undefined
       imgSrc.value = await props.provider.imageUrl(props.item)
       state.value = 'ready'
@@ -98,6 +99,7 @@ onBeforeUnmount(() => {
     <div ref="el" class="view">
       <AnimatedImage v-if="imgSrc" :src="imgSrc" v-bind="frames" @error="state = 'error'" />
       <div v-else-if="item.render === 'file'" class="filetile"><i class="pi pi-file" /><span>{{ ext || 'file' }}</span></div>
+      <div v-else-if="item.thumb === 'none'" class="filetile"><i class="pi pi-video" /><span>3D</span></div>
       <i v-if="state === 'loading'" class="pi pi-spin pi-spinner" />
       <i v-else-if="state === 'error'" class="pi pi-exclamation-triangle" title="Failed to load" />
     </div>

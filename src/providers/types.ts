@@ -19,6 +19,8 @@ export interface CosmeticItem {
   fields: Record<string, FieldValue>
   /** How the item renders: a 3D model, a flat image, or a non-visual file. */
   render: '3d' | 'image' | 'file'
+  /** Card thumbnail for a 3D item: its image ('image'), or just the name ('none'); default is the live model. */
+  thumb?: 'image' | 'none'
 }
 
 export type FieldType = 'text' | 'number' | 'date' | 'multi' | 'bool'
@@ -51,7 +53,16 @@ export interface LoadedModel {
   states: string[]
   state: string
   setState: (state: string) => void
+  /** Playback control for timed animations (emotes); times in seconds. */
+  timeline?: Timeline
   dispose: () => void
+}
+
+export interface Timeline {
+  readonly duration: number
+  readonly time: number
+  paused: boolean
+  seek(seconds: number): void
 }
 
 /** A file listed in the CDN index, for the raw file browser. */
