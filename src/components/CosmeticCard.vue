@@ -5,7 +5,7 @@ const queue = createQueue(6)
 </script>
 
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import AnimatedImage from './AnimatedImage.vue'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import type { SharedRenderer, Slot } from '../three/sharedRenderer'
@@ -14,6 +14,9 @@ const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem }>()
 defineEmits<{ open: [] }>()
 
 const renderer = inject<SharedRenderer>('renderer')!
+// Grid-wide animation state chosen in the toolbar, and the states discovered so far.
+const anim = inject<Ref<string>>('animState', ref(''))
+const known = inject<Ref<string[]>>('animStates', ref([]))
 const el = ref<HTMLElement>()
 const imgSrc = ref('')
 const frames = ref<{ frameW?: number; frameH?: number; frametimeMs: number }>()
@@ -46,6 +49,8 @@ async function activate() {
       return
     }
     model = loaded
+    if (loaded.states.some((s) => !known.value.includes(s))) known.value = [...new Set([...known.value, ...loaded.states])]
+    applyAnim()
     slot = { el: el.value!, object: loaded.object, tick: loaded.tick }
     renderer.add(slot)
     state.value = 'ready'
@@ -54,6 +59,11 @@ async function activate() {
     state.value = 'error'
   }
 }
+
+function applyAnim() {
+  if (model && anim.value && model.states.includes(anim.value)) model.setState(anim.value)
+}
+watch(anim, applyAnim)
 
 function release() {
   if (slot) renderer.remove(slot)

@@ -2,8 +2,9 @@
 import Menu from 'primevue/menu'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
+import SelectButton from 'primevue/selectbutton'
 import Slider from 'primevue/slider'
-import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, provide, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FilterBar from '../components/FilterBar.vue'
@@ -43,6 +44,14 @@ watchEffect(async () => {
 const isFiles = computed(() => props.category === 'all-files')
 
 const search = ref('')
+
+// Animation state applied to every 3D thumbnail that has it (e.g. wings: elytra). Cards report the states they find.
+const animState = ref('')
+const animStates = ref<string[]>([])
+provide('animState', animState)
+provide('animStates', animStates)
+const ORDER = ['idle', 'moving', 'elytra', 'gui']
+const animOptions = computed(() => [...animStates.value].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b)))
 const rules = ref<Rule[]>([])
 const sorts = ref<SortKey[]>([])
 
@@ -69,6 +78,8 @@ watch(
   () => props.category,
   () => {
     search.value = ''
+    animState.value = ''
+    animStates.value = []
     rules.value = []
     sorts.value = loadSort()
     cancelMeasure()
@@ -153,6 +164,10 @@ const menuModel = computed(() => {
       <template v-else>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
+          <span v-if="animOptions.length" class="anim" title="Animation shown on all 3D thumbnails">
+            <span>Animation</span>
+            <SelectButton :model-value="animState || null" :options="animOptions" size="small" @update:model-value="(v: string | null) => (animState = v ?? '')" />
+          </span>
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
         </FilterBar>
@@ -173,6 +188,7 @@ const menuModel = computed(() => {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--p-surface-800); }
 .ms { min-width: 12rem; max-width: 22rem; }
+.anim { display: flex; align-items: center; gap: 0.5rem; opacity: 0.9; }
 .count { margin-left: auto; opacity: 0.6; }
 .zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
 .slider { width: 9rem; }

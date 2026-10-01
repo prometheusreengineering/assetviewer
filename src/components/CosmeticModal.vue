@@ -3,7 +3,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue'
 import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
@@ -32,6 +32,7 @@ let renderer: WebGLRenderer | undefined
 let controls: TrackballControls | undefined
 let raf = 0
 let token = 0
+const animState = inject<Ref<string> | undefined>('animState', undefined)
 const dimTick = ref(0)
 const infoRows = computed(() => (dimTick.value >= 0 && props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
 const shown = shallowRef<CosmeticItem | null>(null)
@@ -85,6 +86,8 @@ async function open(item: CosmeticItem) {
     model = loaded
     hasModel.value = true
     states.value = loaded.states
+    const wanted = animState?.value
+    if (wanted && loaded.states.includes(wanted)) loaded.setState(wanted)
     state.value = loaded.state
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 2.2))
