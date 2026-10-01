@@ -145,7 +145,8 @@ async function downloadGlb() {
 
 async function downloadUrl(url: string, name: string) {
   // Via the hash-keyed cache: a plain fetch can reuse the <img>'s non-CORS cache entry and fail.
-  download(name, await getFileBuffer(url.split('/').pop()!))
+  // blob: URLs (displayed images) are same-origin; CDN URLs go through the cache by hash.
+  download(name, url.startsWith('blob:') ? await (await fetch(url)).arrayBuffer() : await getFileBuffer(url.split('/').pop()!))
 }
 const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp'}`
 </script>

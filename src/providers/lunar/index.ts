@@ -229,6 +229,22 @@ async function loadWing2d(entry: LunarEntry): Promise<LoadedModel> {
   return finish(await buildRig(geo, texBuf, entry.path, anim, ['main'], files))
 }
 
+// Lunar cloaks use the OptiFine layout: a 22x17 base grid (scaled by any integer), cape box 10x16x1 at uv 0,0.
+const CAPE_GEO: GeoFile = {
+  'minecraft:geometry': [
+    {
+      description: { texture_width: 22, texture_height: 17 },
+      bones: [{ name: 'cape', pivot: [0, 0, 0], rotation: [0, 180, 0], cubes: [{ origin: [-5, 0, -1], size: [10, 16, 1], uv: [0, 0] }] }],
+    },
+  ],
+}
+
+async function loadCloak(entry: LunarEntry): Promise<LoadedModel> {
+  const texBuf = await getFileBuffer(hashOf(entry.path))
+  const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
+  return finish(await buildRig(CAPE_GEO, texBuf, entry.path, undefined, [], files))
+}
+
 async function loadObj(entry: LunarEntry): Promise<LoadedModel> {
   const objPath = catalog!.objs.get(entry.modelKey)
   if (!objPath) throw new Error(`No OBJ for ${entry.modelKey}`)
@@ -263,6 +279,19 @@ async function loadObj(entry: LunarEntry): Promise<LoadedModel> {
 }
 
 const TEXT_EXT = /\.(json|molang|fsh|vsh|glsl|txt|mcmeta|csv|properties|yml|yaml)$/i
+
+const MIME: Record<string, string> = { webp: 'image/webp', png: 'image/png', gif: 'image/gif', jpg: 'image/jpeg', jpeg: 'image/jpeg' }
+const blobs = new Map<string, Promise<string>>()
+/** Images are fetched through the CORS-safe hash cache and shown from a blob: URL, so a poisoned browser HTTP cache entry can never break <img>. */
+function blobUrl(path: string): Promise<string> {
+  let p = blobs.get(path)
+  if (!p) {
+    const type = MIME[path.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream'
+    p = getFileBuffer(hashOf(path)).then((b) => URL.createObjectURL(new Blob([b], { type })))
+    blobs.set(path, p)
+  }
+  return p
+}
 
 export const lunarProvider: CosmeticProvider = {
   id: 'lunar',
@@ -325,7 +354,7 @@ export const lunarProvider: CosmeticProvider = {
 
   async imageUrl(item) {
     const e = byId.get(item.id)!
-    return fileUrl(hashOf(e.path))
+    return blobUrl(e.path)
   },
 
   async imageFrames(item) {
@@ -336,6 +365,7 @@ export const lunarProvider: CosmeticProvider = {
     const e = byId.get(item.id)!
     if (e.kind === 'gek') return loadGek(e)
     if (e.kind === 'wing2d') return loadWing2d(e)
+    if (e.kind === 'cloak') return loadCloak(e)
     return loadObj(e)
   },
 

@@ -4,7 +4,10 @@ import type { CosmeticItem } from '../types'
 
 export const PREFIX = 'assets/lunar/'
 
-export type Kind = 'gek' | 'obj' | 'wing2d' | 'image' | 'file'
+/** Cape textures sit directly in cosmetics/cloaks (subfolders hold extras). */
+const isCloakTex = (p: string) => /^cosmetics\/cloaks\/[^/]+\.webp$/.test(p)
+
+export type Kind = 'gek' | 'obj' | 'wing2d' | 'cloak' | 'image' | 'file'
 
 export interface LunarEntry {
   item: CosmeticItem
@@ -138,7 +141,7 @@ export async function loadLunarCatalog(): Promise<LunarCatalog> {
     const path = strip(c.resource)
     const modelKey = c.indexType && c.indexType !== 'NONE' ? c.indexType : ''
     const isGek = path.endsWith('.gek.json')
-    const kind: Kind = isGek ? 'gek' : c.category === 'dragon_wings' ? 'wing2d' : modelKey && objs.has(modelKey) ? 'obj' : 'image'
+    const kind: Kind = isGek ? 'gek' : c.category === 'dragon_wings' ? 'wing2d' : isCloakTex(path) ? 'cloak' : modelKey && objs.has(modelKey) ? 'obj' : 'image'
     add({
       path,
       modelKey,
@@ -171,7 +174,7 @@ export async function loadLunarCatalog(): Promise<LunarCatalog> {
       const path = c[8]!
       if (!has(path)) continue
       const modelKey = c[7] === 'NONE' ? '' : c[7]!
-      const kind: Kind = path.endsWith('.gek.json') ? 'gek' : modelKey && objs.has(modelKey) ? 'obj' : 'image'
+      const kind: Kind = path.endsWith('.gek.json') ? 'gek' : isCloakTex(path) ? 'cloak' : modelKey && objs.has(modelKey) ? 'obj' : 'image'
       add({
         path,
         modelKey,
@@ -210,7 +213,7 @@ export async function loadLunarCatalog(): Promise<LunarCatalog> {
       kind = 'image'
     } else if (/^cosmetics\/cloaks\/[^/]+\.webp$/.test(rel)) {
       category = 'cloak'
-      kind = 'image'
+      kind = 'cloak'
     } else if (/^cosmetics\/wings\/[^/]+\.webp$/.test(rel)) {
       category = 'dragon_wings'
       kind = 'wing2d'
