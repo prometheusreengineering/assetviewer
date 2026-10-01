@@ -5,7 +5,7 @@ import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
-import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
@@ -29,7 +29,7 @@ const state = ref('')
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
-let controls: OrbitControls | undefined
+let controls: TrackballControls | undefined
 let raf = 0
 let token = 0
 const dimTick = ref(0)
@@ -72,9 +72,9 @@ async function open(item: CosmeticItem) {
       imgSrc.value = await props.provider.imageUrl(item)
       return
     }
-    const [loaded, { OrbitControls }] = await Promise.all([
+    const [loaded, { TrackballControls }] = await Promise.all([
       props.provider.loadModel(item),
-      import('three/examples/jsm/controls/OrbitControls.js'),
+      import('three/examples/jsm/controls/TrackballControls.js'),
     ])
     await nextTick()
     const host = canvasHost.value
@@ -98,14 +98,19 @@ async function open(item: CosmeticItem) {
     r.setPixelRatio(Math.min(devicePixelRatio, 2))
     r.setSize(host.clientWidth, host.clientHeight)
     host.appendChild(r.domElement)
-    const c = new OrbitControls(camera, r.domElement)
+    // Trackball controls rotate freely (no pole clamp, can flip upside down), unlike OrbitControls.
+    const c = new TrackballControls(camera, r.domElement)
     controls = c
-    c.enableDamping = true
+    c.noPan = true
+    c.rotateSpeed = 3
+    c.dynamicDampingFactor = 0.1
     c.minDistance = 2
     c.maxDistance = 9
+    let last = 0
     const loop = (ms: number) => {
       raf = requestAnimationFrame(loop)
-      c.autoRotate = autoRotate.value
+      if (autoRotate.value && last) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
+      last = ms
       c.update()
       loaded.tick(ms)
       r.render(scene, camera)
