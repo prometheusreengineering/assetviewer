@@ -192,7 +192,7 @@ async function loadAnim(path: string | undefined): Promise<{ anim?: AnimFile; fi
 
 async function loadGek(entry: LunarEntry): Promise<LoadedModel> {
   const gekHash = hashOf(entry.path)
-  const raw = await getFileJson<{ model?: string | Record<string, string>; texture?: string; animation?: string }>(gekHash)
+  const raw = await getFileJson<{ model?: string | Record<string, string>; texture?: string; animation?: string; state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] } }>(gekHash)
   // `model` may map several geometries to conditions (normal / slim arms); use the default one.
   const modelPath = typeof raw.model === 'object' && raw.model ? Object.entries(raw.model).find(([, c]) => !/is_slim/.test(c) || /!/.test(c))?.[0] ?? Object.keys(raw.model)[0] : raw.model
   if (!modelPath || !raw.texture) throw new Error('gek has no model/texture')
@@ -210,7 +210,10 @@ async function loadGek(entry: LunarEntry): Promise<LoadedModel> {
     ...(texKnown ? [{ name: baseName(gek.texture), data: new Uint8Array(texBuf) }] : []),
   ]
   if (file) files.push(file)
-  return finish(await buildRig(geo, texBuf, stripNs(gek.texture), anim, ['idle'], files))
+  // Default pose: idle, else whatever the state machine plays unconditionally (plays_when "1"), e.g. auras' "main".
+  const states = (raw.state_machine?.controllers ?? []).flatMap((c) => c.states ?? [])
+  const preferred = ['idle', ...states.filter((x) => String(x.plays_when).trim() === '1').map((x) => x.anim), 'main']
+  return finish(await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files))
 }
 
 /** Legacy flat wings: a plain webp drawn on the shared simple_2d_wings model. */

@@ -5,6 +5,7 @@ import { compile, newScope, type Compiled, type FnLib, type Scope } from './mola
 type Raw = number | string
 type Vec = Raw | Raw[]
 interface Keyframe {
+  vector?: Vec
   pre?: Vec
   post?: Vec
   [k: string]: unknown
@@ -59,12 +60,12 @@ function compileChannel(ch: Channel | undefined, lib: FnLib): Track | undefined 
   if (typeof ch === 'number' || typeof ch === 'string' || Array.isArray(ch)) return { eval: compileVec(ch, lib) }
   if ('vector' in ch && ch.vector !== undefined) return { eval: compileVec(ch.vector as Vec, lib) }
 
-  // Keyframes: { "0.0": [..], "0.5": { post: [..] }, ... }
+  // Keyframes: { "0.0": [..], "0.5": { post: [..] }, "1.0": { vector: [..] }, ... }
   const frames = Object.entries(ch as Record<string, Vec | Keyframe>)
     .filter(([k]) => !Number.isNaN(Number(k)))
     .map(([k, val]) => {
       const kf = val as Keyframe
-      const v = Array.isArray(val) || typeof val !== 'object' ? (val as Vec) : ((kf.post ?? kf.pre ?? 0) as Vec)
+      const v = Array.isArray(val) || typeof val !== 'object' ? (val as Vec) : ((kf.vector ?? kf.post ?? kf.pre ?? 0) as Vec)
       return { t: Number(k), v: compileVec(v, lib) }
     })
     .sort((a, b) => a.t - b.t)
