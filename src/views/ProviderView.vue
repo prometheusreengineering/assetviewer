@@ -2,7 +2,7 @@
 import Menu from 'primevue/menu'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import SelectButton from 'primevue/selectbutton'
+import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import { computed, onBeforeUnmount, provide, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
@@ -164,10 +164,16 @@ const menuModel = computed(() => {
       <template v-else>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
-          <span v-if="animOptions.length" class="anim" title="Animation shown on all 3D thumbnails">
-            <span>Animation</span>
-            <SelectButton :model-value="animState || null" :options="animOptions" size="small" @update:model-value="(v: string | null) => (animState = v ?? '')" />
-          </span>
+          <Select
+            v-if="animOptions.length"
+            :model-value="animState || null"
+            :options="animOptions"
+            placeholder="Animation"
+            show-clear
+            class="anim"
+            title="Animation shown on all 3D thumbnails"
+            @update:model-value="(v: string | null) => (animState = v ?? '')"
+          />
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
         </FilterBar>
@@ -188,7 +194,7 @@ const menuModel = computed(() => {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--p-surface-800); }
 .ms { min-width: 12rem; max-width: 22rem; }
-.anim { display: flex; align-items: center; gap: 0.5rem; opacity: 0.9; }
+.anim { min-width: 11rem; }
 .count { margin-left: auto; opacity: 0.6; }
 .zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
 .slider { width: 9rem; }
