@@ -10,6 +10,7 @@ watch(
   (src) => {
     nat.value = undefined
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => (nat.value = { w: img.naturalWidth, h: img.naturalHeight })
     img.onerror = () => emit('error')
     img.src = src
@@ -42,7 +43,7 @@ const sheet = computed(() => {
           animation: `sheet-step ${sheet.frames * (frametimeMs ?? 100)}ms steps(${sheet.frames}, jump-none) infinite`,
         }"
       />
-      <img v-else :src="src" />
+      <img v-else :src="src" crossorigin="anonymous" />
     </template>
   </div>
 </template>

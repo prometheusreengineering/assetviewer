@@ -6,8 +6,9 @@ import { AnimationPlayer, type AnimFile } from '../../three/animation/bedrockAni
 import { parseFunctions, type FnLib } from '../../three/animation/molang'
 import { disposeObject, fitObject } from '../../three/fit'
 import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } from '../../three/geoModel'
-import type { CategoryDef, CosmeticProvider, DownloadFile, FilterDef, IndexedFile, LoadedModel } from '../types'
-import { loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
+import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FilterDef, IndexedFile, LoadedModel } from '../types'
+import { LUNAR_INDEXES } from '../../config'
+import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
 const COSMETIC_LABELS: Record<string, [string, string]> = {
   hat: ['Hats', 'pi-crown'],
@@ -47,6 +48,21 @@ const RESOURCE_LABELS: Record<string, [string, string]> = {
 }
 
 export const ALL_FILES = 'all-files'
+
+let owners: Map<string, LunarEntry> | undefined
+/** The catalog entry a file belongs to: the file itself, or a sibling sharing its folder and stem (geo, anim, texture, mcmeta). */
+function ownerOf(path: string): LunarEntry | undefined {
+  if (!owners) {
+    owners = new Map()
+    const key = (p: string) => p.replace(/\/(textures|thumbnail)\//, '/').replace(/\.(mcmeta|gek\.json|geo\.json|anim\.json|webp|png|gif|jpe?g)/g, '')
+    for (const e of catalog!.entries) {
+      owners.set(e.path, e)
+      owners.set(key(e.path), e)
+    }
+  }
+  const direct = owners.get(path) ?? owners.get(path.replace(/\.mcmeta$/, ''))
+  return direct ?? owners.get(path.replace(/\/(textures|thumbnail)\//, '/').replace(/\.(mcmeta|gek\.json|geo\.json|anim\.json|webp|png|gif|jpe?g)/g, ''))
+}
 
 let catalog: LunarCatalog | undefined
 let byId = new Map<string, LunarEntry>()
@@ -257,6 +273,7 @@ export const lunarProvider: CosmeticProvider = {
     loading ??= loadLunarCatalog().then((c) => {
       catalog = c
       byId = new Map(c.entries.map((e) => [e.item.id, e]))
+      owners = undefined
     })
     return loading
   },
@@ -283,7 +300,7 @@ export const lunarProvider: CosmeticProvider = {
       if (!counts.has(id)) continue
       defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources' })
     }
-    defs.push({ id: ALL_FILES, count: catalog!.files.size, label: 'All files', icon: 'pi-folder-open', group: 'Resources' })
+    defs.unshift({ id: ALL_FILES, count: catalog!.files.size, label: 'All files', icon: 'pi-folder-open', group: '' })
     return defs
   },
 
@@ -331,12 +348,33 @@ export const lunarProvider: CosmeticProvider = {
   },
 
   indexedFiles(): IndexedFile[] {
-    return [...catalog!.files].map(([path, hash]) => ({
-      path: path.startsWith(PREFIX) ? path.slice(PREFIX.length) : path,
-      hash,
-      size: catalog!.sizes.get(path) ?? 0,
-    }))
+    return [...catalog!.files].map(([full, hash]) => {
+      const path = full.startsWith(PREFIX) ? full.slice(PREFIX.length) : full
+      return { path, hash, size: catalog!.sizes.get(full) ?? 0, name: ownerOf(path)?.item.name ?? `${humanize(path)} (file)` }
+    })
   },
+
+  fileItem(path) {
+    const owner = ownerOf(path)
+    if (owner) return owner.item
+    const id = `file:${path}`
+    let e = byId.get(id)
+    if (!e) {
+      const image = /\.(webp|png|gif|jpe?g)$/i.test(path)
+      const item: CosmeticItem = {
+        id,
+        name: `${humanize(path)} (file)`,
+        category: ALL_FILES,
+        fields: { ext: path.split('.').pop() ?? '', themes: [], colors: [] },
+        render: image ? 'image' : 'file',
+      }
+      e = { item, path, modelKey: '', kind: image ? 'image' : 'file', info: { Path: path } }
+      byId.set(id, e)
+    }
+    return e.item
+  },
+
+  stats: () => ({ items: catalog!.entries.length, files: catalog!.files.size, indexes: LUNAR_INDEXES }),
 
   info: (item) => byId.get(item.id)?.info ?? {},
 }

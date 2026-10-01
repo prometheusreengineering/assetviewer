@@ -60,7 +60,7 @@ async function loadFileMap() {
 const strip = (r: string) => r.replace(/^lunar:/, '')
 const IMAGE = /\.(webp|png|gif|jpe?g)$/i
 
-const humanize = (path: string) =>
+export const humanize = (path: string) =>
   path
     .split('/')
     .pop()!

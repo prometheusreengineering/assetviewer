@@ -6,6 +6,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile } from '../providers/types'
@@ -87,7 +88,7 @@ async function open(item: CosmeticItem) {
     const key = new DirectionalLight(0xffffff, 1.4)
     key.position.set(-2, 3, -4)
     scene.add(key, loaded.object)
-    const camera = new PerspectiveCamera(30, host.clientWidth / host.clientHeight, 0.1, 50)
+    const camera = new PerspectiveCamera(30, host.clientWidth / host.clientHeight, 1, 12)
     camera.position.set(0, 0.5, -4.2)
     const r = new WebGLRenderer({ antialias: true, alpha: true })
     renderer = r
@@ -97,6 +98,8 @@ async function open(item: CosmeticItem) {
     const c = new OrbitControls(camera, r.domElement)
     controls = c
     c.enableDamping = true
+    c.minDistance = 2
+    c.maxDistance = 9
     const loop = (ms: number) => {
       raf = requestAnimationFrame(loop)
       c.autoRotate = autoRotate.value
@@ -141,8 +144,8 @@ async function downloadGlb() {
 }
 
 async function downloadUrl(url: string, name: string) {
-  const blob = await (await fetch(url)).blob()
-  download(name, blob, blob.type || 'application/octet-stream')
+  // Via the hash-keyed cache: a plain fetch can reuse the <img>'s non-CORS cache entry and fail.
+  download(name, await getFileBuffer(url.split('/').pop()!))
 }
 const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp'}`
 </script>

@@ -4,12 +4,14 @@ import Menu from 'primevue/menu'
 import Message from 'primevue/message'
 import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
+import Slider from 'primevue/slider'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FileBrowser from '../components/FileBrowser.vue'
 import { providers } from '../providers'
+import { stats } from '../stats'
 import type { CategoryDef, CosmeticItem, FilterDef } from '../providers/types'
 
 const props = defineProps<{ provider: string; category?: string }>()
@@ -27,6 +29,8 @@ watchEffect(async () => {
   try {
     await provider.value.load()
     categories.value = provider.value.categories()
+    const st = provider.value.stats?.()
+    if (st) stats.value = { name: provider.value.name, ...st }
     ready.value = true
     if (!props.category && categories.value[0]) {
       const first = categories.value.find((c) => c.id === 'hat') ?? categories.value[0]
@@ -62,6 +66,19 @@ const items = computed(() => {
     }
     return true
   })
+})
+
+// Cards per row (zoom): fewer columns means bigger previews.
+const COLS_KEY = 'assetviewer.cols'
+const cols = ref(6)
+try {
+  const saved = Number(localStorage.getItem(COLS_KEY))
+  if (saved >= 2 && saved <= 12) cols.value = saved
+} catch {}
+watch(cols, (c) => {
+  try {
+    localStorage.setItem(COLS_KEY, String(c))
+  } catch {}
 })
 
 const isFiles = computed(() => props.category === 'all-files')
@@ -112,8 +129,9 @@ const menuModel = computed(() => {
           <label v-else class="toggle"><ToggleSwitch v-model="filterState[f.key]" />{{ f.label }}</label>
         </template>
         <span class="count">{{ items.length }} items</span>
+        <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
       </div>
-      <CosmeticGrid :key="provider.id + category" :provider="provider" :items="items" />
+      <CosmeticGrid :key="provider.id + category" :provider="provider" :items="items" :cols="cols" />
       </template>
     </section>
   </div>
@@ -131,4 +149,6 @@ const menuModel = computed(() => {
 .ms { min-width: 12rem; max-width: 22rem; }
 .toggle { display: flex; align-items: center; gap: 0.5rem; }
 .count { margin-left: auto; opacity: 0.6; }
+.zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
+.slider { width: 9rem; }
 </style>

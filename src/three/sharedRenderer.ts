@@ -14,7 +14,7 @@ export interface Slot {
 export class SharedRenderer {
   private renderer: WebGLRenderer
   private scene = new Scene()
-  private camera = new PerspectiveCamera(30, 1, 0.1, 50)
+  private camera = new PerspectiveCamera(30, 1, 1, 12)
   private slots = new Set<Slot>()
   private container: HTMLElement | null = null
   private wrapper: HTMLElement

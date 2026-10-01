@@ -60,7 +60,7 @@ export function createTexture(bitmap: ImageBitmap): Texture {
 }
 
 export function createMaterial(map: Texture) {
-  return new MeshLambertMaterial({ map, alphaTest: 0.3, alphaToCoverage: true, side: DoubleSide })
+  return new MeshLambertMaterial({ map, alphaTest: 0.3, alphaToCoverage: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
 }
 
 function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
@@ -90,8 +90,9 @@ function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]
   return rects
 }
 
-function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial): Mesh {
-  const inf = cube.inflate ?? 0
+// Coplanar faces from overlapping cubes z-fight; a tiny per-cube growth breaks the tie deterministically.
+function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number): Mesh {
+  const inf = (cube.inflate ?? 0) + (index % 40) * 0.008
   const geo = new BoxGeometry(cube.size[0] + inf * 2, cube.size[1] + inf * 2, cube.size[2] + inf * 2)
   const rects = faceRects(cube)
   const uvs: number[] = []
@@ -138,6 +139,7 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root
     pivots.set(bone.name, bone.pivot ?? [0, 0, 0])
   }
 
+  let cubeIndex = 0
   const root = new Group()
   const bones = new Map<string, Bone>()
   for (const bone of g.bones) {
@@ -155,7 +157,7 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root
     if (!bone.parent || !groups.has(bone.parent)) root.add(group)
 
     for (const cube of bone.cubes ?? []) {
-      const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material)
+      const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material, cubeIndex++)
       const center = [
         cube.origin[0] + cube.size[0] / 2,
         cube.origin[1] + cube.size[1] / 2,

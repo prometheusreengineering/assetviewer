@@ -50,6 +50,8 @@ export interface LoadedModel {
 
 /** A file listed in the CDN index, for the raw file browser. */
 export interface IndexedFile {
+  /** Name shown on the cosmetic card for this file (or one derived from the path). */
+  name: string
   path: string
   hash: string
   size: number
@@ -79,6 +81,10 @@ export interface CosmeticProvider {
   rawFile?(item: CosmeticItem): Promise<RawFile>
   /** Every file in the CDN index. */
   indexedFiles?(): IndexedFile[]
+  /** The item to open in the modal for an indexed file (its owning cosmetic, or the file itself). */
+  fileItem?(path: string): CosmeticItem
+  /** Catalog statistics for the footer. */
+  stats?(): { items: number; files: number; indexes: string[] }
   /** Metadata lines shown in the modal. */
   info?(item: CosmeticItem): Record<string, string>
 }

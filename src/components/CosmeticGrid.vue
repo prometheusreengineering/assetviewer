@@ -5,7 +5,7 @@ import { SharedRenderer } from '../three/sharedRenderer'
 import CosmeticCard from './CosmeticCard.vue'
 import CosmeticModal from './CosmeticModal.vue'
 
-defineProps<{ provider: CosmeticProvider; items: CosmeticItem[] }>()
+defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number }>()
 
 const container = ref<HTMLElement>()
 const renderer = new SharedRenderer()
@@ -18,7 +18,7 @@ onBeforeUnmount(() => renderer.detach())
 
 <template>
   <div ref="container" class="grid-wrap">
-    <div class="grid">
+    <div class="grid" :style="{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }">
       <CosmeticCard v-for="it in items" :key="it.id" :provider="provider" :item="it" @open="selected = it" />
     </div>
   </div>
@@ -27,5 +27,5 @@ onBeforeUnmount(() => renderer.detach())
 
 <style scoped>
 .grid-wrap { position: relative; flex: 1; overflow: auto; }
-.grid { padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; }
+.grid { padding: 1rem; display: grid; gap: 0.75rem; }
 </style>
