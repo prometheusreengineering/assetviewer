@@ -32,7 +32,8 @@ let renderer: WebGLRenderer | undefined
 let controls: OrbitControls | undefined
 let raf = 0
 let token = 0
-const infoRows = computed(() => (props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
+const dimTick = ref(0)
+const infoRows = computed(() => (dimTick.value >= 0 && props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
 const shown = shallowRef<CosmeticItem | null>(null)
 
 function teardown() {
@@ -59,6 +60,8 @@ async function open(item: CosmeticItem) {
   const mine = token
   shown.value = item
   loading.value = true
+  // width/height are read from the file header (a few bytes), then the info rows refresh
+  void props.provider.ensureDimensions?.([item], () => {}, new AbortController().signal).then(() => dimTick.value++)
   try {
     if (item.render === 'file') {
       raw.value = await props.provider.rawFile!(item)

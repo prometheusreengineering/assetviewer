@@ -453,7 +453,32 @@ export const lunarProvider: CosmeticProvider = {
 
   stats: () => ({ items: catalog!.entries.length, files: catalog!.files.size, indexes: LUNAR_INDEXES }),
 
-  info: (item) => byId.get(item.id)?.info ?? {},
+  info: (item) => {
+    const e = byId.get(item.id)
+    if (!e) return {}
+    const f = item.fields
+    const list = (v: unknown) => (Array.isArray(v) && v.length ? v.join(', ') : undefined)
+    const yn = (v: unknown) => (v === undefined ? undefined : v ? 'Yes' : 'No')
+    const rows: Record<string, string | undefined> = {
+      Type: f.type === '3D' ? '3D model' : f.type === '2D' ? '2D image' : 'File',
+      Category: (COSMETIC_LABELS[item.category] ?? RESOURCE_LABELS[item.category])?.[0] ?? item.category,
+      ID: f.id !== undefined ? String(f.id) : undefined,
+      Released: typeof f.released === 'number' ? new Date(f.released).toISOString().slice(0, 10) : undefined,
+      Themes: list(f.themes),
+      Colors: list(f.colors),
+      Animated: yn(f.animated),
+      Special: yn(f.special),
+      'File type': f.ext ? String(f.ext) : undefined,
+      'File size': typeof f.size === 'number' && f.size ? `${f.size.toLocaleString()} bytes` : undefined,
+      Dimensions: typeof f.width === 'number' && f.width ? `${f.width} × ${f.height} px` : undefined,
+      Folder: f.folder ? String(f.folder) : undefined,
+    }
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(rows)) if (v !== undefined) out[k] = v
+    // catalog extras (description, source path, ...) that aren't already shown
+    for (const [k, v] of Object.entries(e.info)) if (!(k in out) && k !== 'ID' && k !== 'Released') out[k] = v
+    return out
+  },
 }
 
 export function zipFiles(files: DownloadFile[]): Uint8Array<ArrayBuffer> {
