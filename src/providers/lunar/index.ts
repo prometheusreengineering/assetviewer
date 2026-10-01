@@ -52,6 +52,7 @@ const RESOURCE_LABELS: Record<string, [string, string]> = {
 }
 
 export const ALL_FILES = 'all-files'
+export const OUTFIT = 'outfit'
 
 let owners: Map<string, LunarEntry> | undefined
 /** The catalog entry a file belongs to: the file itself, or a sibling sharing its folder and stem (geo, anim, texture, mcmeta). */
@@ -376,6 +377,7 @@ export const lunarProvider: CosmeticProvider = {
       if (!counts.has(id)) continue
       defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources (2D)' })
     }
+    defs.unshift({ id: OUTFIT, count: counts.get('emotes') ?? 0, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })
     defs.unshift({ id: ALL_FILES, count: catalog!.files.size, label: 'All files', icon: 'pi-folder-open', group: '' })
     return defs
   },

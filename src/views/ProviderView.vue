@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FilterBar from '../components/FilterBar.vue'
 import FileBrowser from '../components/FileBrowser.vue'
+import OutfitBuilder from '../components/OutfitBuilder.vue'
 import { applyView, type Rule, type SortKey } from '../filtering'
 import { providers } from '../providers'
 import { stats } from '../stats'
@@ -42,6 +43,9 @@ watchEffect(async () => {
 })
 
 const isFiles = computed(() => props.category === 'all-files')
+const isOutfit = computed(() => props.category === 'outfit')
+// Pages that are not an item grid.
+const isTool = computed(() => isFiles.value || isOutfit.value)
 
 const search = ref('')
 
@@ -92,8 +96,8 @@ watch(sorts, (v) => {
   } catch {}
 })
 
-const fields = computed<FieldDef[]>(() => (ready.value && props.category && !isFiles.value ? provider.value.fields(props.category) : []))
-const allItems = computed<CosmeticItem[]>(() => (ready.value && props.category && !isFiles.value ? provider.value.items(props.category) : []))
+const fields = computed<FieldDef[]>(() => (ready.value && props.category && !isTool.value ? provider.value.fields(props.category) : []))
+const allItems = computed<CosmeticItem[]>(() => (ready.value && props.category && !isTool.value ? provider.value.items(props.category) : []))
 
 // Image width/height are read lazily (a few header bytes per file) once a rule or sort needs them.
 const needsDims = computed(() => [...rules.value, ...sorts.value].some((x) => x.field === 'width' || x.field === 'height'))
@@ -138,7 +142,7 @@ const menuModel = computed(() => {
     const g = c.group ?? ''
     if (!groups.has(g)) groups.set(g, [])
     groups.get(g)!.push({
-      label: `${c.label} (${c.count})`,
+      label: c.group === 'Tools' ? c.label : `${c.label} (${c.count})`,
       icon: `pi ${c.icon}`,
       class: c.id === props.category ? 'cat-active' : '',
       command: () => router.push(`/${props.provider}/${c.id}`),
@@ -161,6 +165,7 @@ const menuModel = computed(() => {
     <aside class="side"><Menu :model="menuModel" /></aside>
     <section class="main">
       <FileBrowser v-if="isFiles" :provider="provider" />
+      <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
       <template v-else>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
