@@ -82,6 +82,6 @@ function create() {
 .panel { display: flex; flex-direction: column; gap: 0.5rem; min-width: 15rem; }
 .list { display: flex; flex-direction: column; max-height: 14rem; overflow-y: auto; }
 .row { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.25rem; cursor: pointer; border-radius: 6px; }
-.row:hover { background: var(--p-surface-800); }
+.row:hover { background: var(--av-border); }
 .none { opacity: 0.6; margin: 0.4rem 0.25rem; font-size: 0.85rem; }
 </style>

@@ -4,11 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import type { CosmeticItem, CosmeticProvider } from '../providers/types'
 import { SharedRenderer } from '../three/sharedRenderer'
 import CosmeticCard from './CosmeticCard.vue'
+import CosmeticList from './CosmeticList.vue'
 import CosmeticModal from './CosmeticModal.vue'
 import CompareDialog from './CompareDialog.vue'
 
 // selected: ids ticked; passes: scope ids passing the filter (scope = the selection if any, else all), null = no filter.
-const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number; selected: Set<string>; passes: Set<string> | null }>()
+const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number; view?: 'grid' | 'list'; selected: Set<string>; passes: Set<string> | null }>()
 defineEmits<{ select: [id: string] }>()
 const route = useRoute()
 const router = useRouter()
@@ -48,7 +49,8 @@ onBeforeUnmount(() => renderer.detach())
 
 <template>
   <div ref="container" class="grid-wrap">
-    <div class="grid" :style="{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }">
+    <CosmeticList v-if="view === 'list'" :items="items" :selected="selected" :gray-of="grayOf" @open="openItem" @select="(id) => $emit('select', id)" />
+    <div v-else class="grid" :style="{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }">
       <CosmeticCard
         v-for="it in items"
         :key="it.id"

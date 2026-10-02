@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Menubar from 'primevue/menubar'
 import Tag from 'primevue/tag'
@@ -6,6 +7,7 @@ import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { skinName } from './skin'
 import { stats } from './stats'
+import { dark } from './theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,10 +39,13 @@ const items = [
         </a>
       </template>
       <template #end>
+        <div class="end">
         <span class="player" title="Minecraft username: its skin is used on emotes and in the player previews (loaded from mc-heads.net). Empty = placeholder skin.">
           <i class="pi pi-user" />
           <InputText v-model="player" size="small" placeholder="Player name" spellcheck="false" autocomplete="off" @keyup.enter="applyPlayer" @blur="applyPlayer" />
         </span>
+        <Button :icon="dark ? 'pi pi-sun' : 'pi pi-moon'" :title="dark ? 'Switch to light mode' : 'Switch to dark mode'" :aria-label="dark ? 'Light mode' : 'Dark mode'" severity="secondary" text rounded size="small" class="theme" @click="dark = !dark" />
+        </div>
       </template>
     </Menubar>
     <router-view :key="String(route.params.provider)" />
@@ -58,14 +63,15 @@ const items = [
 <style scoped>
 .shell { display: flex; flex-direction: column; height: 100%; }
 .nav { border-radius: 0; }
-.foot { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; padding: 0.5rem 1rem; font-size: 0.8rem; border-top: 1px solid var(--p-surface-800); opacity: 0.75; }
+.foot { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; padding: 0.5rem 1rem; font-size: 0.8rem; border-top: 1px solid var(--av-border); opacity: 0.75; }
 .foot a { margin-left: auto; color: inherit; }
 .stats code { margin-left: 0.4rem; }
 .brand { margin-right: 1.5rem; }
+.end { display: flex; align-items: center; gap: 0.5rem; }
 .player { display: flex; align-items: center; gap: 0.5rem; }
 .player .pi { opacity: 0.7; }
 .player :deep(input) { width: 11rem; }
 .nav-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.9rem; cursor: pointer; border-radius: 6px; }
-.nav-item:hover, .nav-item.active { background: var(--p-surface-800); }
+.nav-item:hover, .nav-item.active { background: var(--av-border); }
 .nav-item.active { color: var(--p-primary-color); }
 </style>

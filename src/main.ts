@@ -5,8 +5,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import { router } from './router'
 import './style.css'
-
-document.documentElement.classList.add('app-dark')
+import './theme'
 
 createApp(App)
   .use(PrimeVue, {

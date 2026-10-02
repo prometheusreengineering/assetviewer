@@ -1,5 +1,5 @@
 import { zipSync } from 'fflate'
-import { Group, type MeshLambertMaterial } from 'three'
+import { Box3, Group, Quaternion, Vector3, type MeshLambertMaterial, type Object3D } from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { fileUrl, getFileBuffer, getFileJson, getFileText } from '../../cdn'
 import { AnimationPlayer, type AnimFile } from '../../three/animation/bedrockAnim'
@@ -53,6 +53,8 @@ const RESOURCE_LABELS: Record<string, [string, string]> = {
 }
 
 export const ALL_FILES = 'all-files'
+/** Pseudo category holding every item of every category. */
+export const EVERYTHING = 'everything'
 // Fully covered by the Emotes category (icons, props, body, actions); still listed under All files.
 const HIDDEN_CATEGORIES = new Set(['emote_icons', 'emote_textures', 'emote_data'])
 export const OUTFIT = 'outfit'
@@ -77,6 +79,7 @@ let byId = new Map<string, LunarEntry>()
 let loading: Promise<void> | undefined
 let molangLib: Promise<FnLib> | undefined
 
+const DEG = Math.PI / 180
 const stripNs = (p: string) => p.replace(/^lunar:/, '')
 const baseName = (p: string) => p.split('/').pop()!
 const hashOf = (relPath: string) => {
@@ -169,6 +172,7 @@ async function buildRig(
   preferred: string[],
   files: DownloadFile[],
   raw = false,
+  prep?: (root: Object3D) => void,
 ): Promise<Rig> {
   const bitmap = await toBitmap(texBuf, false)
   const tex = createTexture(bitmap)
@@ -179,6 +183,7 @@ async function buildRig(
   tex.repeat.y = 1 / frames
   const material = createMaterial(tex)
   const { root, bones } = buildGeoRig(geo, material)
+  prep?.(root)
   // raw: keep player-space coordinates (blocks) for dressing a player.
   const object = raw ? root : fitObject(root)
   const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
@@ -201,7 +206,14 @@ async function loadAnim(path: string | undefined): Promise<{ anim?: AnimFile; fi
 
 async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedModel> {
   const gekHash = hashOf(entry.path)
-  const raw = await getFileJson<{ model?: string | Record<string, string>; texture?: string; animation?: string; state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] } }>(gekHash)
+  const raw = await getFileJson<{
+    model?: string | Record<string, string>
+    texture?: string
+    animation?: string
+    attached_bone?: string
+    transformations?: { transformType: string; values: { angle?: number; x?: number; y?: number; z?: number } }[]
+    state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] }
+  }>(gekHash)
   // `model` may map several geometries to conditions (normal / slim arms); use the default one.
   const modelPath = typeof raw.model === 'object' && raw.model ? Object.entries(raw.model).find(([, c]) => !/is_slim/.test(c) || /!/.test(c))?.[0] ?? Object.keys(raw.model)[0] : raw.model
   if (!modelPath || !raw.texture) throw new Error('gek has no model/texture')
@@ -222,24 +234,99 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
   // Default pose: idle, else whatever the state machine plays unconditionally (plays_when "1"), e.g. auras' "main".
   const states = (raw.state_machine?.controllers ?? []).flatMap((c) => c.states ?? [])
   const preferred = ['idle', ...states.filter((x) => String(x.plays_when).trim() === '1').map((x) => x.anim), 'main']
-  return finish(await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files, playerSpace))
+  return finish(
+    await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files, playerSpace, (root) => {
+      // Bedrock geometry is x-mirrored and faces -z (Blockbench negates x on import). Unmirror it for the plain
+      // view (front still towards the camera at -z); on a player (faces +z) that plus a half turn is a z flip.
+      if (playerSpace) root.scale.z *= -1
+      else root.scale.x *= -1
+      // Unconditional "rotate" transformations (a few backpacks are modelled backwards).
+      for (const t of raw.transformations ?? []) {
+        const v = t.values
+        if (t.transformType === 'rotate' && v.angle) root.quaternion.multiply(new Quaternion().setFromAxisAngle(new Vector3(v.x ?? 0, v.y ?? 0, v.z ?? 0).normalize(), v.angle * DEG))
+      }
+      root.userData.attachedBone = raw.attached_bone
+    }),
+  )
 }
 
-/** Legacy flat wings: a plain webp drawn on the shared simple_2d_wings model. */
+// Legacy "dragon wings" textures are ender dragon sheets (256 grid, x4): the vanilla dragon wing is a 56-long
+// bone at uv 112,88 with a 56x56 membrane at -56,88, then a wing tip (bone 112,136, membrane -56,144).
+// Built at WING_S scale on the upper back, Bedrock convention (back = +z, the player's right = -x).
+const WING_S = 0.2
+function dragonWingGeo(): GeoFile {
+  const L = 56 * WING_S
+  type Uv = Record<string, { uv: [number, number]; uv_size: [number, number] }>
+  const box = (u: number, v: number, w: number, d: number): Uv => ({
+    north: { uv: [u + d, v + d], uv_size: [w, d] },
+    south: { uv: [u + d + w + d, v + d], uv_size: [w, d] },
+    up: { uv: [u + d, v], uv_size: [w, d] },
+    down: { uv: [u + d + w, v], uv_size: [w, d] },
+    east: { uv: [u, v + d], uv_size: [d, d] },
+    west: { uv: [u + d + w, v + d], uv_size: [d, d] },
+  })
+  const skin = (v: number): Uv => ({ up: { uv: [0, v], uv_size: [56, 56] }, down: { uv: [56, v], uv_size: [56, 56] } })
+  // side -1 = right wing (extends to -x), +1 = left (mirrored)
+  const wing = (side: 1 | -1, name: string) => {
+    const x0 = side * 1.5
+    const at = (x: number, len: number) => (side < 0 ? x - len : x)
+    return [
+      {
+        name: `${name}_wing`,
+        parent: 'wings',
+        pivot: [x0, 23, 2.5],
+        rotation: [-75, side * -25, side * -30],
+        cubes: [
+          { origin: [at(x0, L), 22.2, 1.7], size: [L, 1.6, 1.6], uv: box(112, 88, 56, 8) },
+          { origin: [at(x0, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(88) },
+        ],
+      },
+      {
+        name: `${name}_tip`,
+        parent: `${name}_wing`,
+        pivot: [x0 + side * L, 23, 2.5],
+        cubes: [
+          { origin: [at(x0 + side * L, L), 22.6, 2.1], size: [L, 0.8, 0.8], uv: box(112, 136, 56, 4) },
+          { origin: [at(x0 + side * L, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(144) },
+        ],
+      },
+    ]
+  }
+  return {
+    'minecraft:geometry': [
+      {
+        description: { texture_width: 256, texture_height: 256 },
+        bones: [{ name: 'wings', pivot: [0, 23, 2.5] }, ...wing(-1, 'right'), ...wing(1, 'left')],
+      },
+    ],
+  } as unknown as GeoFile
+}
+// A slow flap: the wings swing back and forth while the tips fold.
+const DRAGON_WING_ANIM: AnimFile = {
+  animations: {
+    main: {
+      loop: true,
+      bones: {
+        right_wing: { rotation: ['math.cos(q.life_time * 150) * 8', 'math.sin(q.life_time * 150) * 12', 'math.sin(q.life_time * 150) * 8'] },
+        left_wing: { rotation: ['math.cos(q.life_time * 150) * 8', '-math.sin(q.life_time * 150) * 12', '-math.sin(q.life_time * 150) * 8'] },
+        right_tip: { rotation: [0, 0, '-15 + math.sin(q.life_time * 150 + 115) * 12'] },
+        left_tip: { rotation: [0, 0, '15 - math.sin(q.life_time * 150 + 115) * 12'] },
+      },
+    },
+  },
+}
+
+/** Legacy dragon wings: an ender dragon texture sheet on a pair of dragon wings. */
 async function loadWing2d(entry: LunarEntry, raw = false): Promise<LoadedModel> {
-  const geoRel = 'cosmetics/models/gek/wings/simple_2d_wings.geo.json'
-  const animRel = 'cosmetics/models/gek/wings/simple_2d_wings.anim.json'
-  const [geo, texBuf, { anim, file }] = await Promise.all([
-    getFileJson<GeoFile>(hashOf(geoRel)),
-    getFileBuffer(hashOf(entry.path)),
-    loadAnim(animRel),
-  ])
-  const files: DownloadFile[] = [
-    { name: baseName(entry.path), data: new Uint8Array(texBuf) },
-    { name: baseName(geoRel), data: new TextEncoder().encode(JSON.stringify(geo)) },
-  ]
-  if (file) files.push(file)
-  return finish(await buildRig(geo, texBuf, entry.path, anim, ['main'], files, raw))
+  const texBuf = await getFileBuffer(hashOf(entry.path))
+  const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
+  return finish(
+    await buildRig(dragonWingGeo(), texBuf, entry.path, DRAGON_WING_ANIM, ['main'], files, raw, (root) => {
+      // Same frame as gek models (see loadGek).
+      if (raw) root.scale.z *= -1
+      else root.scale.x *= -1
+    }),
+  )
 }
 
 // Lunar cloaks use the OptiFine layout: a 22x17 base grid (scaled by any integer), cape box 10x16x1 at uv 0,0.
@@ -283,10 +370,18 @@ async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   tex.offset.y = 1 - 1 / frames
   const material = createMaterial(tex)
   const parsedObj = new OBJLoader().parse(new TextDecoder().decode(objBuf))
-  // Java model space is y-down (rendered with scale -1,-1,1): turn it upright.
+  // Three conventions exist. Older models are y-down (Java, rendered with scale -1,-1,1) around the head
+  // or the neck; later ones are y-down in player space (feet at 0, so the head is near y = -1.75); the
+  // newest are y-up in player space. Tell them apart by the vertical center.
+  const box = new Box3().setFromObject(parsedObj)
+  const cy = (box.min.y + box.max.y) / 2
+  const body = objPath.includes('/bodywear/')
+  const space = cy > 0.6 ? 'feet-up' : cy < (body ? -0.4 : -1) ? 'feet' : 'local'
   const obj = new Group()
   obj.add(parsedObj)
-  parsedObj.rotation.z = Math.PI
+  if (space !== 'feet-up') parsedObj.rotation.z = Math.PI
+  obj.userData.objSpace = space
+  obj.userData.objBody = body
   obj.traverse((o) => {
     if ('material' in o) (o as unknown as { material: MeshLambertMaterial }).material = material
   })
@@ -327,6 +422,8 @@ const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'fi
 function enrich(c: LunarCatalog) {
   for (const e of c.entries) {
     const f = e.item.fields
+    const cat = e.item.category
+    f.category = COSMETIC_LABELS[cat]?.[0] ?? RESOURCE_LABELS[cat]?.[0] ?? cat
     if (e.kind === 'emote') {
       // Emotes span several shared files; path/size of the icon would mislead.
       f.type = '3D'
@@ -381,16 +478,17 @@ export const lunarProvider: CosmeticProvider = {
       defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources (2D)' })
     }
     defs.unshift({ id: OUTFIT, count: counts.get('emotes') ?? 0, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })
-    defs.unshift({ id: ALL_FILES, count: catalog!.files.size, label: 'All files', icon: 'pi-folder-open', group: '' })
+    defs.unshift({ id: EVERYTHING, count: catalog!.entries.length, label: 'Everything', icon: 'pi-th-large', group: '' })
     return defs
   },
 
   fields(category): FieldDef[] {
-    const list = catalog!.entries.filter((e) => e.item.category === category).map((e) => e.item)
+    const list = catalog!.entries.filter((e) => category === EVERYTHING || e.item.category === category).map((e) => e.item)
     const has = (k: string) => list.some((it) => it.fields[k] !== undefined && it.fields[k] !== '' && !(Array.isArray(it.fields[k]) && !(it.fields[k] as string[]).length))
     const opts = (k: string) => [...new Set(list.flatMap((it) => (Array.isArray(it.fields[k]) ? (it.fields[k] as string[]) : it.fields[k] ? [String(it.fields[k])] : [])))].sort()
     const out: FieldDef[] = [{ key: 'name', label: 'Name', type: 'text' }]
     const add = (key: string, label: string, type: FieldDef['type'], extra: Partial<FieldDef> = {}) => has(key) && out.push({ key, label, type, ...extra })
+    add('category', 'Category', 'multi', { options: opts('category') })
     add('id', 'ID', 'number')
     add('released', 'Released', 'date')
     add('themes', 'Theme', 'multi', { options: opts('themes') })
@@ -434,7 +532,7 @@ export const lunarProvider: CosmeticProvider = {
     await Promise.all(Array.from({ length: 12 }, worker))
   },
 
-  items: (category) => catalog!.entries.filter((e) => e.item.category === category).map((e) => e.item),
+  items: (category) => catalog!.entries.filter((e) => category === EVERYTHING || e.item.category === category).map((e) => e.item),
 
   async imageUrl(item) {
     const e = byId.get(item.id)!
@@ -490,9 +588,6 @@ export const lunarProvider: CosmeticProvider = {
       }
       walk(await getFileJson(hashOf(e.path)))
       for (const r of refs) await add(r)
-    } else if (e.kind === 'wing2d') {
-      await add('cosmetics/models/gek/wings/simple_2d_wings.geo.json')
-      await add('cosmetics/models/gek/wings/simple_2d_wings.anim.json')
     } else if (e.kind === 'obj') {
       const objPath = catalog!.objs.get(e.modelKey)
       if (objPath) await add(objPath.slice(PREFIX.length))

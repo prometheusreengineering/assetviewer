@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { useRoute, useRouter } from 'vue-router'
 import type { CosmeticProvider, Timeline } from '../providers/types'
 import { skinName } from '../skin'
+import { autoRotate } from '../viewPrefs'
 import { Viewer } from '../three/viewer'
 
 const props = defineProps<{ provider: CosmeticProvider }>()
@@ -48,7 +49,6 @@ const host = ref<HTMLElement>()
 let viewer: Viewer | undefined
 const loading = ref(false)
 const error = ref('')
-const autoRotate = ref(true)
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
@@ -122,6 +122,7 @@ function seek(v: number | number[]) {
 
 onMounted(() => {
   viewer = new Viewer(host.value!)
+  viewer.autoRotate = autoRotate.value
   viewer.onFrame = (m) => {
     const tl = m.timeline
     if (tl && Math.abs(tl.time - tlTime.value) >= 0.05) tlTime.value = Math.round(tl.time * 20) / 20
@@ -179,7 +180,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .outfit { display: flex; flex: 1; min-height: 0; }
-.slots { width: 300px; overflow-y: auto; padding: 0.75rem 1rem; border-right: 1px solid var(--p-surface-800); display: flex; flex-direction: column; gap: 0.5rem; }
+.slots { width: 300px; overflow-y: auto; padding: 0.75rem 1rem; border-right: 1px solid var(--av-border); display: flex; flex-direction: column; gap: 0.5rem; }
 .head { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.25rem; }
 .slot { display: grid; grid-template-columns: 7.5rem 1fr; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
 .slot span { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -189,7 +190,7 @@ onBeforeUnmount(() => {
 .canvas { flex: 1; min-height: 0; }
 .busy { position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; }
 .err { position: absolute; top: 1rem; left: 1rem; color: var(--p-red-400); }
-.controls { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-top: 1px solid var(--p-surface-800); }
+.controls { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-top: 1px solid var(--av-border); }
 .controls label { display: flex; align-items: center; gap: 0.5rem; }
 .pose { width: 13rem; }
 .scrub { width: 10rem; }

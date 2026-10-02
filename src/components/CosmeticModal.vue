@@ -6,13 +6,14 @@ import CollectionPicker from './CollectionPicker.vue'
 import Slider from 'primevue/slider'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import { formatBytes } from '../format'
+import { autoRotate, freeRotate, wireframe } from '../viewPrefs'
 import { zipFiles } from '../providers/lunar'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
 import { playerEmoteId, showOnPlayer, skinName } from '../skin'
@@ -21,6 +22,8 @@ import ControlsHelp from './ControlsHelp.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
 const emit = defineEmits<{ close: [] }>()
+// Pinned: no backdrop and clicking outside doesn't close it, so the app stays usable while it is open.
+const pinned = ref(false)
 
 const canvasHost = ref<HTMLElement>()
 const imgSrc = ref('')
@@ -28,10 +31,7 @@ const imgFrames = ref<{ frameW?: number; frameH?: number; frametimeMs: number }>
 const raw = ref<RawFile>()
 const loading = ref(false)
 const error = ref('')
-const wireframe = ref(false)
-const autoRotate = ref(true)
 // Free = trackball (any angle, can flip upside down); capped = orbit (stays upright, poles clamped).
-const freeRotate = ref(true)
 const hasModel = ref(false)
 const states = ref<string[]>([])
 const state = ref('')
@@ -54,7 +54,6 @@ let controls: Controls | undefined
 let swapControls: ((free: boolean) => void) | undefined
 let raf = 0
 let token = 0
-const animState = inject<Ref<string> | undefined>('animState', undefined)
 const dimTick = ref(0)
 const infoRows = computed(() => (dimTick.value >= 0 && props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
 const shown = shallowRef<CosmeticItem | null>(null)
@@ -115,10 +114,9 @@ async function open(item: CosmeticItem) {
     // ".webp, .obj, .json": the distinct extensions of the source files in the zip
     zipExts.value = [...new Set(loaded.files.map((f) => '.' + (f.name.split('.').pop() ?? '').toLowerCase()))].join(', ')
     hasModel.value = true
+    applyWireframe(wireframe.value)
     states.value = loaded.states
     timeline.value = loaded.timeline
-    const wanted = animState?.value
-    if (wanted && loaded.states.includes(wanted)) loaded.setState(wanted)
     state.value = loaded.state
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 2.2))
@@ -185,16 +183,18 @@ watch(
   () => props.item,
   (it) => (it ? open(it) : teardown()),
 )
-watch(wireframe, (w) => {
+const applyWireframe = (w: boolean) =>
   model?.object.traverse((o) => {
     if (o instanceof Mesh) (o.material as MeshLambertMaterial).wireframe = w
   })
-})
+watch(wireframe, applyWireframe)
 watch(state, (s) => model?.setState(s))
 // The header's player name changed: redraw anything wearing the skin.
 watch(skinName, () => usesSkin.value && shown.value && open(shown.value))
 watch(freeRotate, (f) => swapControls?.(f))
 watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
+// A deep link (?item=) already has the item when the modal mounts, so the watch above never fires for it.
+onMounted(() => props.item && open(props.item))
 onBeforeUnmount(teardown)
 
 const copied = ref(false)
@@ -222,8 +222,13 @@ const downloadMenu = ref<InstanceType<typeof Menu>>()
 const zipExts = ref('')
 const downloadOptions = computed(() => {
   if (hasModel.value) {
+    // A single source file is downloaded as is, not zipped.
+    const only = model?.files.length === 1 ? model.files[0]! : undefined
+    const ext = only?.name.split('.').pop()?.toLowerCase() ?? ''
     return [
-      { label: `ZIP (${zipExts.value})`, sub: 'original source files from the CDN', icon: 'pi pi-folder', command: downloadZip },
+      only
+        ? { label: `${ext.toUpperCase()} (.${ext})`, sub: 'original source file from the CDN', icon: 'pi pi-file', command: () => download(only.name, only.data as Uint8Array<ArrayBuffer>, 'application/octet-stream') }
+        : { label: `ZIP (${zipExts.value})`, sub: 'original source files from the CDN', icon: 'pi pi-folder', command: downloadZip },
       { label: 'GLB (.glb)', sub: 'auto-generated all-in-one 3D file', icon: 'pi pi-box', command: downloadGlb },
     ]
   }
@@ -264,15 +269,25 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 <template>
   <Dialog
     :visible="!!item"
-    modal
-    dismissable-mask
+    :modal="!pinned"
+    :dismissable-mask="!pinned"
+    :pt="{ mask: { class: pinned ? 'pin-mask' : '' } }"
     :style="{ width: 'min(900px, 95vw)' }"
-    @update:visible="(v: boolean) => !v && emit('close')"
+    @update:visible="(v: boolean) => !v && (pinned = false, emit('close'))"
   >
     <template #header>
       <div class="titlebar">
         <CollectionPicker v-if="item" :provider="provider.id" :item-id="item.id" />
         <span class="p-dialog-title">{{ item?.name }}</span>
+        <Button
+          icon="pi pi-thumbtack"
+          :severity="pinned ? undefined : 'secondary'"
+          :title="pinned ? 'Unpin' : 'Pin: keep this window open and keep using the app (drag it aside)'"
+          size="small"
+          rounded
+          text
+          @click="pinned = !pinned"
+        />
       </div>
     </template>
     <div class="stage" :class="{ text: !!raw }">
@@ -291,7 +306,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
         </div>
         <div v-if="hasRow2" class="row">
-          <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
+          <Select v-if="states.some((s) => s !== 'idle' && s !== 'main')" v-model="state" :options="states" size="small" placeholder="Animation" />
           <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
           <Select
             v-if="dressed"
@@ -340,7 +355,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 </template>
 
 <style scoped>
-.stage { position: relative; height: 60vh; background: var(--p-surface-950); border-radius: 8px; overflow: hidden; }
+.stage { position: relative; height: 60vh; background: var(--av-stage); border-radius: 8px; overflow: hidden; }
 .canvas { position: absolute; inset: 0; }
 .code { position: absolute; inset: 0; margin: 0; padding: 1rem; overflow: auto; font-size: 0.8rem; }
 .busy { position: absolute; inset: 0; margin: auto; width: 2rem; height: 2rem; font-size: 2rem; }
@@ -352,11 +367,12 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .pose { width: 12rem; }
 .chev { font-size: 0.7rem; margin-left: 0.15rem; }
 .dl-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.9rem; cursor: pointer; }
-.dl-item:hover { background: var(--p-surface-800); }
+.dl-item:hover { background: var(--av-border); }
 .dl-text { display: flex; flex-direction: column; }
 .dl-label { font-weight: 600; }
 .dl-sub { font-size: 0.8rem; opacity: 0.65; }
-.titlebar { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.titlebar { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; }
+.titlebar .p-button:last-child { margin-left: auto; }
 label { display: flex; align-items: center; gap: 0.5rem; }
 .info { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 2rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
 .pair { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0 0.75rem; min-width: 0; }

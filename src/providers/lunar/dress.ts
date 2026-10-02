@@ -14,11 +14,15 @@ const BIPED: Record<string, string> = {
   LeftArm: 'left_arm',
   RightLeg: 'right_leg',
   LeftLeg: 'left_leg',
+  RightItem: 'right_arm',
+  LeftItem: 'left_arm',
 }
 const OTHER_SIDE: Record<string, string> = { right_arm: 'left_arm', left_arm: 'right_arm', right_leg: 'left_leg', left_leg: 'right_leg' }
-/** OBJ models (legacy hats/bodywear) are placed around these centers (blocks). */
+/** Older OBJ models (legacy hats/bodywear) are placed around these points (blocks). */
 const HEAD_CENTER = 1.75
+const NECK = 1.5
 const CHEST_CENTER = 1.125
+const CHEST_FRONT = 0.135
 const HEAD_TOP = 0.25
 
 const _a = new Vector3()
@@ -42,11 +46,17 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
   const bone = (name: string) => player.skel.bones.get(name)!
   scene.add(object)
   if (entry.kind === 'obj') {
-    const box = new Box3().setFromObject(object)
-    const body = entry.item.category === 'bodywear'
-    // Hats drawn entirely above the head center sit on top of the head.
-    const lift = !body && entry.item.category === 'hat' && box.min.y > -0.05 ? HEAD_TOP - box.min.y : 0
-    object.position.y = (body ? CHEST_CENTER : HEAD_CENTER) + lift
+    const body = !!object.userData.objBody
+    // Player-space OBJs are already in place; the older ones are centered on the head (or hang from the neck).
+    if (object.userData.objSpace === 'local') {
+      const box = new Box3().setFromObject(object)
+      // Hats drawn entirely above the head center sit on top of the head.
+      const lift = !body && box.min.y > -0.05 ? HEAD_TOP - box.min.y : 0
+      // Necklaces and ties hang from the neck; flat ones are drawn at z=0 and need moving onto the chest.
+      const hangs = body && box.max.y < 0.05
+      object.position.y = (body ? (hangs ? NECK : CHEST_CENTER) : HEAD_CENTER) + lift
+      if (hangs && box.max.z - box.min.z < 0.1) object.position.z = CHEST_FRONT - box.min.z
+    }
     scene.updateMatrixWorld(true)
     socket(bone(body ? 'low_body' : 'head'), object)
     return
@@ -54,7 +64,9 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
   scene.updateMatrixWorld(true)
   const matches: [Object3D, string][] = []
   object.traverse((o) => {
-    const m = /^biped(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg)/.exec(o.name)
+    // armorX bones normally sit under bipedX; some models reference one they don't define (a sword under
+    // "armorRightArm"), which leaves the bone at the root.
+    const m = /^biped(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg|RightItem|LeftItem)/.exec(o.name) ?? /^(?:biped|armor)(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg)/.exec(o.userData.missingParent ?? '')
     if (!m) return
     let target = BIPED[m[1]!]!
     // Some models mirror their left/right pivots; follow the limb on the same side.
@@ -66,6 +78,17 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
     matches.push([o, target])
   })
   for (const [o, target] of matches) socket(bone(target), o)
+  if (matches.length) return
+  // No biped bones: the model is in player space and follows the bone named by the gek.
+  const attached = object.userData.attachedBone as string | undefined
+  if (attached === 'RIGHT_ARM') {
+    // Held items are modelled around the origin: put it in the right hand, pointing forward.
+    object.position.set(-0.375, 0.7, 0.1)
+    object.rotation.x = -Math.PI / 2
+    scene.updateMatrixWorld(true)
+    socket(bone('right_arm'), object)
+  } else if (attached === 'HEAD') socket(bone('head'), object)
+  else if (attached === 'SHOULDER') socket(bone('low_body'), object)
 }
 
 export async function dressPlayer(

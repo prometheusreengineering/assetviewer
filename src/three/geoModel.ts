@@ -157,6 +157,8 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root
     })
     ;(bone.parent ? groups.get(bone.parent) : undefined)?.add(group)
     if (!bone.parent || !groups.has(bone.parent)) root.add(group)
+    // Some models parent bones to one they don't define (e.g. a sword under "armorRightArm"); keep the name for dressing.
+    if (bone.parent && !groups.has(bone.parent)) group.userData.missingParent = bone.parent
 
     for (const cube of bone.cubes ?? []) {
       const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material, cubeIndex++)

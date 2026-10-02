@@ -4,6 +4,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { AmbientLight, DirectionalLight, MOUSE, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { autoRotate } from '../viewPrefs'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import AnimatedImage from './AnimatedImage.vue'
 
@@ -24,7 +25,6 @@ const panes = shallowRef<Pane[]>([])
 const setPane = (i: number, p: Pane) => (panes.value = panes.value.map((x, j) => (j === i ? p : x)))
 const paneEls = ref<HTMLElement[]>([])
 const stage = ref<HTMLElement>()
-const autoRotate = ref(true)
 const sync = ref(true)
 
 // ONE renderer and ONE camera for all panes (scissored viewports), so rotate/pan/zoom stay in sync.
@@ -185,7 +185,7 @@ const rows = computed(() => {
 
 <style scoped>
 .stage { position: relative; display: grid; gap: 0.5rem; height: 55vh; }
-.pane { position: relative; background: var(--p-surface-950); border-radius: 8px; overflow: hidden; display: grid; place-items: center; }
+.pane { position: relative; background: var(--av-stage); border-radius: 8px; overflow: hidden; display: grid; place-items: center; }
 .pane :deep(img), .pane :deep(canvas) { max-width: 100%; max-height: 100%; }
 .stage > :deep(canvas) { z-index: 1; }
 .label { position: absolute; left: 0.6rem; bottom: 0.4rem; font-size: 0.85rem; opacity: 0.8; z-index: 2; pointer-events: none; }
@@ -196,7 +196,7 @@ const rows = computed(() => {
 .actions label { display: flex; align-items: center; gap: 0.5rem; }
 .hint { opacity: 0.55; font-size: 0.85rem; }
 .fields { width: 100%; border-collapse: collapse; font-size: 0.85rem; table-layout: fixed; }
-.fields th, .fields td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--p-surface-800); word-break: break-word; vertical-align: top; }
+.fields th, .fields td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--av-border); word-break: break-word; vertical-align: top; }
 .fields th:first-child { width: 9rem; opacity: 0.6; font-weight: normal; }
 .fields tr.differs td { background: color-mix(in srgb, var(--p-primary-color) 12%, transparent); }
 </style>

@@ -11,6 +11,7 @@ import {
   WebGLRenderTarget,
   WebGLRenderer,
 } from 'three'
+import { autoRotate } from '../viewPrefs'
 
 export interface Slot {
   el: HTMLElement
@@ -148,7 +149,7 @@ export class SharedRenderer {
       r.setScissor(x, y, rect.width, rect.height)
       this.camera.aspect = rect.width / rect.height
       this.camera.updateProjectionMatrix()
-      obj.rotation.y = ms * 0.0008
+      if (autoRotate.value) obj.rotation.y = ms * 0.0008
       slot.tick?.(ms)
       this.scene.add(obj)
       if (slot.gray) this.renderGray(r, rect.width, rect.height)

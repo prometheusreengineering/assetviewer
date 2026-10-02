@@ -5,7 +5,7 @@ const queue = createQueue(6)
 </script>
 
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CollectionPicker from './CollectionPicker.vue'
 import AnimatedImage from './AnimatedImage.vue'
 import Checkbox from 'primevue/checkbox'
@@ -17,9 +17,6 @@ const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem; sele
 defineEmits<{ open: []; select: [] }>()
 
 const renderer = inject<SharedRenderer>('renderer')!
-// Grid-wide animation state chosen in the toolbar, and the states discovered so far.
-const anim = inject<Ref<string>>('animState', ref(''))
-const known = inject<Ref<string[]>>('animStates', ref([]))
 const el = ref<HTMLElement>()
 const imgSrc = ref('')
 const frames = ref<{ frameW?: number; frameH?: number; frametimeMs: number }>()
@@ -54,8 +51,6 @@ async function activate() {
       return
     }
     model = loaded
-    if (loaded.states.some((s) => !known.value.includes(s))) known.value = [...new Set([...known.value, ...loaded.states])]
-    applyAnim()
     slot = { el: el.value!, object: loaded.object, tick: loaded.tick, gray: props.gray }
     renderer.add(slot)
     state.value = 'ready'
@@ -65,10 +60,6 @@ async function activate() {
   }
 }
 
-function applyAnim() {
-  if (model && anim.value && model.states.includes(anim.value)) model.setState(anim.value)
-}
-watch(anim, applyAnim)
 // 3D previews are drawn by the shared canvas, so the gray state is passed to its slot.
 watch(
   () => props.gray,
@@ -123,7 +114,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.card { position: relative; background: var(--p-surface-900); border: 1px solid var(--p-surface-800); border-radius: 10px; cursor: pointer; overflow: hidden; content-visibility: auto; contain-intrinsic-size: 190px 230px; }
+.card { position: relative; background: var(--av-card); border: 1px solid var(--av-border); border-radius: 10px; cursor: pointer; overflow: hidden; content-visibility: auto; contain-intrinsic-size: 190px 230px; }
 .card:hover { border-color: var(--p-primary-color); }
 .pick { position: absolute; top: 0.4rem; left: 0.4rem; z-index: 3; opacity: 0; transition: opacity 0.15s; }
 /* States while a selection exists: selected = accent outline; gray = faded; selected but filtered out = gray with a dashed outline. */

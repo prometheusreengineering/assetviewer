@@ -2,13 +2,14 @@
 import Menu from 'primevue/menu'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import Select from 'primevue/select'
 import Slider from 'primevue/slider'
-import { computed, onBeforeUnmount, provide, ref, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CosmeticGrid from '../components/CosmeticGrid.vue'
 import FilterBar from '../components/FilterBar.vue'
-import FileBrowser from '../components/FileBrowser.vue'
+import SelectButton from 'primevue/selectbutton'
+import ToggleSwitch from 'primevue/toggleswitch'
+import { autoRotate } from '../viewPrefs'
 import OutfitBuilder from '../components/OutfitBuilder.vue'
 import ExportButton from '../components/ExportButton.vue'
 import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rule, type SortKey } from '../filtering'
@@ -38,6 +39,7 @@ watchEffect(async () => {
     const st = provider.value.stats?.()
     if (st) stats.value = { name: provider.value.name, ...st }
     ready.value = true
+    if (props.category === 'all-files') return void router.replace(`/${props.provider}/everything`)
     if (!props.category && categories.value[0]) {
       const first = categories.value.find((c) => c.id === 'hat') ?? categories.value[0]
       router.replace(`/${props.provider}/${first.id}`)
@@ -47,22 +49,30 @@ watchEffect(async () => {
   }
 })
 
-const isFiles = computed(() => props.category === 'all-files')
 const isOutfit = computed(() => props.category === 'outfit')
 // Pages that are not an item grid.
-const isTool = computed(() => isFiles.value || isOutfit.value)
+const isTool = computed(() => isOutfit.value)
 const collections = computed(() => useCollections(props.provider))
 const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX) ? collections.value.get(props.category.slice(COLLECTION_PREFIX.length)) : undefined))
 
+// Categories bigger than this get a performance warning.
+const LAG_LIMIT = 500
 const search = ref('')
+// Grid of cards or a compact list; remembered across categories.
+const VIEWS = [
+  { value: 'grid', icon: 'pi pi-th-large', title: 'Grid view' },
+  { value: 'list', icon: 'pi pi-list', title: 'List view' },
+]
+const view = ref<'grid' | 'list'>('grid')
+try {
+  if (localStorage.getItem('assetviewer.view') === 'list') view.value = 'list'
+} catch {}
+watch(view, (v) => {
+  try {
+    localStorage.setItem('assetviewer.view', v)
+  } catch {}
+})
 
-// Animation state applied to every 3D thumbnail that has it (e.g. wings: elytra). Cards report the states they find.
-const animState = ref('')
-const animStates = ref<string[]>([])
-provide('animState', animState)
-provide('animStates', animStates)
-const ORDER = ['idle', 'moving', 'elytra', 'gui']
-const animOptions = computed(() => [...animStates.value].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b)))
 const rules = ref<Rule[]>([])
 const sorts = ref<SortKey[]>([])
 
@@ -91,8 +101,6 @@ watch(
     // A shared link (?q=&f=&s=) wins over the remembered sort.
     const q = route.query
     search.value = typeof q.q === 'string' ? q.q : ''
-    animState.value = ''
-    animStates.value = []
     rules.value = typeof q.f === 'string' ? decodeRules(q.f) : []
     sorts.value = typeof q.s === 'string' ? decodeSorts(q.s) : loadSort()
     clearSelection()
@@ -100,7 +108,7 @@ watch(
   },
   { immediate: true },
 )
-// Keep the view in the URL so it can be shared (outfit/all-files pages manage their own query).
+// Keep the view in the URL so it can be shared (the outfit page manage their own query).
 watch(
   [search, rules, sorts],
   () => {
@@ -300,21 +308,10 @@ const menuModel = computed(() => {
   <div v-else class="layout">
     <aside class="side"><Menu :model="menuModel" /></aside>
     <section class="main">
-      <FileBrowser v-if="isFiles" :provider="provider" />
-      <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
+      <OutfitBuilder v-if="isOutfit" :provider="provider" />
       <template v-else>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
-          <Select
-            v-if="animOptions.length"
-            :model-value="animState || null"
-            :options="animOptions"
-            placeholder="Animation"
-            show-clear
-            class="anim"
-            title="Animation shown on all 3D thumbnails"
-            @update:model-value="(v: string | null) => (animState = v ?? '')"
-          />
         <template v-if="collection">
           <Button icon="pi pi-pencil" size="small" text severity="secondary" title="Rename" @click="renameCollection" />
           <Button v-if="collection.id !== 'fav'" icon="pi pi-trash" size="small" text severity="secondary" title="Delete collection" @click="deleteCollection" />
@@ -331,14 +328,22 @@ const menuModel = computed(() => {
           <Button label="Clear" size="small" text severity="secondary" @click="clearSelection" />
         </template>
         <span class="count">{{ items.length }} items</span>
-        <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
+        <SelectButton v-model="view" :options="VIEWS" option-value="value" option-label="title" :allow-empty="false" size="small" aria-label="View">
+          <template #option="{ option }"><i :class="option.icon" :title="option.title" /></template>
+        </SelectButton>
+        <label v-if="view === 'grid'" class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
+        <label v-if="view === 'grid'" class="zoom" title="Rotate the 3D thumbnails (also applies to the modal, compare and outfit builder)"><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         </FilterBar>
       </div>
+      <Message v-if="allItems.length > LAG_LIMIT" severity="warn" :closable="false" class="lag" icon="pi pi-exclamation-triangle">
+        This category has {{ allItems.length.toLocaleString() }} items, so the page may be laggy.
+      </Message>
       <CosmeticGrid
         :key="provider.id + category"
         :provider="provider"
         :items="displayItems"
         :cols="cols"
+        :view="view"
         :selected="selectedSet"
         :passes="passes"
         @select="toggleSelected"
@@ -352,14 +357,14 @@ const menuModel = computed(() => {
 .center { display: grid; place-items: center; flex: 1; text-align: center; }
 .m { margin: 1rem; }
 .layout { display: flex; flex: 1; min-height: 0; }
-.side { width: 230px; overflow-y: auto; padding: 0.75rem; border-right: 1px solid var(--p-surface-800); }
+.side { width: 230px; overflow-y: auto; padding: 0.75rem; border-right: 1px solid var(--av-border); }
 .side :deep(.p-menu) { width: 100%; border: 0; background: transparent; }
-.side :deep(.cat-active .p-menu-item-content) { background: var(--p-surface-800); color: var(--p-primary-color); }
+.side :deep(.cat-active .p-menu-item-content) { background: var(--av-border); color: var(--p-primary-color); }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--p-surface-800); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--av-border); }
+.lag { margin: 0.5rem 1rem 0; }
 .selcount { color: var(--p-primary-color); }
 .ms { min-width: 12rem; max-width: 22rem; }
-.anim { min-width: 11rem; }
 .count { margin-left: auto; opacity: 0.6; }
 .zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
 .slider { width: 9rem; }

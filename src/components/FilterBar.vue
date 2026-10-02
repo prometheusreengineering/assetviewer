@@ -168,7 +168,7 @@ const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = 
 .chip { cursor: pointer; font-size: 0.85rem; }
 .lbl { display: inline-flex; gap: 0.4rem; align-items: center; padding: 0.15rem 0; }
 .lbl i { font-size: 0.75rem; opacity: 0.7; }
-.sortchip { background: var(--p-surface-800); }
+.sortchip { background: var(--av-border); }
 .meas { opacity: 0.7; font-size: 0.85rem; }
 .pop { display: flex; flex-direction: column; gap: 0.6rem; min-width: 16rem; }
 .val { width: 100%; }
