@@ -1,11 +1,19 @@
 <script setup lang="ts">
+import InputText from 'primevue/inputtext'
 import Menubar from 'primevue/menubar'
 import Tag from 'primevue/tag'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { skinName } from './skin'
 import { stats } from './stats'
 
 const route = useRoute()
 const router = useRouter()
+
+// Global player name: its skin is used by emotes and the "show on player" views.
+const player = ref(skinName.value)
+watch(skinName, (v) => (player.value = v))
+const applyPlayer = () => (skinName.value = player.value.trim())
 
 const items = [
   { id: 'lunar', label: 'Lunar Client', icon: 'pi pi-moon' },
@@ -28,6 +36,12 @@ const items = [
           <Tag v-if="(item as any).soon" value="soon" severity="secondary" />
         </a>
       </template>
+      <template #end>
+        <span class="player" title="Minecraft username: its skin is used on emotes and in the player previews (loaded from mc-heads.net). Empty = placeholder skin.">
+          <i class="pi pi-user" />
+          <InputText v-model="player" size="small" placeholder="Player name" spellcheck="false" autocomplete="off" @keyup.enter="applyPlayer" @blur="applyPlayer" />
+        </span>
+      </template>
     </Menubar>
     <router-view :key="String(route.params.provider)" />
     <footer class="foot">
@@ -48,6 +62,9 @@ const items = [
 .foot a { margin-left: auto; color: inherit; }
 .stats code { margin-left: 0.4rem; }
 .brand { margin-right: 1.5rem; }
+.player { display: flex; align-items: center; gap: 0.5rem; }
+.player .pi { opacity: 0.7; }
+.player :deep(input) { width: 11rem; }
 .nav-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.9rem; cursor: pointer; border-radius: 6px; }
 .nav-item:hover, .nav-item.active { background: var(--p-surface-800); }
 .nav-item.active { color: var(--p-primary-color); }

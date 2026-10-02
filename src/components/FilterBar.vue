@@ -8,7 +8,7 @@ import MultiSelect from 'primevue/multiselect'
 import Popover from 'primevue/popover'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { OPS, type Rule, type SortKey } from '../filtering'
 import type { FieldDef } from '../providers/types'
 
@@ -53,7 +53,14 @@ function saveFilter() {
   rules.value = i >= 0 ? rules.value.map((x) => (x.id === r.id ? r : x)) : [...rules.value, r]
   filterPop.value!.hide()
 }
-const removeRule = (id: number) => (rules.value = rules.value.filter((r) => r.id !== id))
+function removeRule(id: number) {
+  // Its editor may be open; the rule is going away.
+  if (editing.value && draft.value.id === id) filterPop.value?.hide()
+  rules.value = rules.value.filter((r) => r.id !== id)
+}
+// A click on a chip's remove (x) icon bubbles to the chip itself; it must not open the editor.
+const onChip = (e: Event, r: Rule) => !(e.target as HTMLElement).closest('.p-chip-remove-icon') && openFilter(e, r)
+const onSortChip = (e: Event) => !(e.target as HTMLElement).closest('.p-chip-remove-icon') && sortPop.value!.toggle(e)
 
 function fmt(v: unknown, def: FieldDef): string {
   if (def.type === 'date') return typeof v === 'number' ? new Date(v).toISOString().slice(0, 10) : '…'
@@ -90,6 +97,13 @@ function openSort(e: Event) {
   if (!sorts.value.length) addSort()
   sortPop.value!.toggle(e)
 }
+// Popovers are anchored to chips/buttons: close them when the sort list empties or this bar goes away,
+// otherwise they float in the corner with nothing to point at.
+watch(() => sorts.value.length, (n) => !n && sortPop.value?.hide())
+onBeforeUnmount(() => {
+  filterPop.value?.hide()
+  sortPop.value?.hide()
+})
 const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = ''))
 </script>
 
@@ -101,10 +115,10 @@ const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = 
     <slot />
   </div>
   <div v-if="rules.length || sorts.length" class="chips">
-    <Chip v-for="r in rules" :key="r.id" removable class="chip" @click="openFilter($event, r)" @remove="removeRule(r.id)">
+    <Chip v-for="r in rules" :key="r.id" removable class="chip" @click="onChip($event, r)" @remove="removeRule(r.id)">
       <span class="lbl"><i class="pi pi-filter" /> {{ describe(r) }}</span>
     </Chip>
-    <Chip v-if="sorts.length" class="chip sortchip" @click="sortPop!.toggle($event)">
+    <Chip v-if="sorts.length" class="chip sortchip" @click="onSortChip">
       <span class="lbl"><i class="pi pi-sort-amount-down" /> {{ sorts.map(sortLabel).join('  ›  ') }}</span>
     </Chip>
     <Button label="Clear all" size="small" text severity="secondary" @click="clearAll" />

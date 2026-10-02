@@ -2,7 +2,6 @@
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
-import InputText from 'primevue/inputtext'
 import CollectionPicker from './CollectionPicker.vue'
 import Slider from 'primevue/slider'
 import Select from 'primevue/select'
@@ -39,10 +38,11 @@ const state = ref('')
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
-const skinDraft = ref(skinName.value)
 const isEmote = computed(() => shown.value?.category === 'emotes')
 // Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
 const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
+// Second row: animation, show-on-player (+ what it reveals), or an emote's skin and play controls.
+const hasRow2 = computed(() => states.value.length > 1 || canDress.value || !!timeline.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
 const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
@@ -191,6 +191,8 @@ watch(wireframe, (w) => {
   })
 })
 watch(state, (s) => model?.setState(s))
+// The header's player name changed: redraw anything wearing the skin.
+watch(skinName, () => usesSkin.value && shown.value && open(shown.value))
 watch(freeRotate, (f) => swapControls?.(f))
 watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
 onBeforeUnmount(teardown)
@@ -211,12 +213,6 @@ function seek(v: number | number[]) {
   const t = Array.isArray(v) ? v[0]! : v
   tlTime.value = t
   timeline.value?.seek(t)
-}
-function applySkin() {
-  const v = skinDraft.value.trim()
-  if (v === skinName.value) return
-  skinName.value = v
-  if (shown.value) open(shown.value)
 }
 
 const slug = () => (shown.value?.name ?? 'item').toLowerCase().replace(/[^a-z0-9]+/g, '_')
@@ -289,45 +285,50 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
     </div>
     <div class="actions">
       <template v-if="hasModel">
-        <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
-        <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
-        <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
-        <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
-        <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
-        <Select
-          v-if="dressed"
-          v-model="playerEmoteId"
-          :options="emoteOptions"
-          option-label="label"
-          option-value="value"
-          filter
-          show-clear
-          size="small"
-          placeholder="Pose: standing"
-          class="pose"
-          title="Play an emote while wearing it"
-        />
-        <template v-if="timeline">
-          <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded :title="playing ? 'Pause' : 'Play'" @click="togglePlay" />
-          <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
-          <span class="time">{{ tlTime.toFixed(1) }} / {{ timeline.duration.toFixed(1) }} s</span>
-        </template>
-        <InputText v-if="usesSkin" v-model="skinDraft" size="small" placeholder="Skin (Minecraft username)" class="skin" title="Loads the skin from mc-heads.net; empty = placeholder" @keyup.enter="applySkin" @blur="applySkin" />
+        <div class="row">
+          <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
+          <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
+          <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
+        </div>
+        <div v-if="hasRow2" class="row">
+          <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
+          <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
+          <Select
+            v-if="dressed"
+            v-model="playerEmoteId"
+            :options="emoteOptions"
+            option-label="label"
+            option-value="value"
+            filter
+            show-clear
+            size="small"
+            placeholder="Pose: standing"
+            class="pose"
+            title="Play an emote while wearing it"
+          />
+          <template v-if="timeline">
+            <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded :title="playing ? 'Pause' : 'Play'" @click="togglePlay" />
+            <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
+            <span class="time">{{ tlTime.toFixed(1) }} / {{ timeline.duration.toFixed(1) }} s</span>
+          </template>
+        </div>
       </template>
-      <Button v-if="downloadOptions.length" size="small" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
-        <i class="pi pi-download" />
-        <span>Download</span>
-        <i class="pi pi-chevron-down chev" />
-      </Button>
-      <Menu ref="downloadMenu" :model="downloadOptions" popup class="dl-menu">
-        <template #item="{ item }">
-          <a class="dl-item">
-            <i :class="item.icon" />
-            <span class="dl-text"><span class="dl-label">{{ item.label }}</span><span class="dl-sub">{{ (item as { sub?: string }).sub }}</span></span>
-          </a>
-        </template>
-      </Menu>
-      <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
+      <div class="row">
+        <Button v-if="downloadOptions.length" size="small" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
+          <i class="pi pi-download" />
+          <span>Download</span>
+          <i class="pi pi-chevron-down chev" />
+        </Button>
+        <Menu ref="downloadMenu" :model="downloadOptions" popup class="dl-menu">
+          <template #item="{ item }">
+            <a class="dl-item">
+              <i :class="item.icon" />
+              <span class="dl-text"><span class="dl-label">{{ item.label }}</span><span class="dl-sub">{{ (item as { sub?: string }).sub }}</span></span>
+            </a>
+          </template>
+        </Menu>
+        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
+      </div>
     </div>
     <dl v-if="infoRows.length" class="info">
       <div v-for="[k, v] in infoRows" :key="k" class="pair" :class="{ wide: v.length > 36 }">
@@ -344,10 +345,10 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .code { position: absolute; inset: 0; margin: 0; padding: 1rem; overflow: auto; font-size: 0.8rem; }
 .busy { position: absolute; inset: 0; margin: auto; width: 2rem; height: 2rem; font-size: 2rem; }
 .err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
-.actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.75rem; }
+.row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .scrub { width: 10rem; }
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
-.skin { width: 13rem; }
 .pose { width: 12rem; }
 .chev { font-size: 0.7rem; margin-left: 0.15rem; }
 .dl-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.9rem; cursor: pointer; }

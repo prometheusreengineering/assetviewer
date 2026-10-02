@@ -6,11 +6,10 @@ import { SharedRenderer } from '../three/sharedRenderer'
 import CosmeticCard from './CosmeticCard.vue'
 import CosmeticModal from './CosmeticModal.vue'
 import CompareDialog from './CompareDialog.vue'
-import Button from 'primevue/button'
-import Chip from 'primevue/chip'
-import { comparing, toggleCompare } from '../compare'
 
-const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number }>()
+// selected: ids ticked; passes: scope ids passing the filter (scope = the selection if any, else all), null = no filter.
+const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; cols: number; selected: Set<string>; passes: Set<string> | null }>()
+defineEmits<{ select: [id: string] }>()
 const route = useRoute()
 const router = useRouter()
 
@@ -18,7 +17,7 @@ const container = ref<HTMLElement>()
 const renderer = new SharedRenderer()
 provide('renderer', renderer)
 // The open item lives in the URL (?item=id) so a link opens it directly.
-const selected = computed<CosmeticItem | null>(() => {
+const opened = computed<CosmeticItem | null>(() => {
   const id = route.query.item
   if (typeof id !== 'string') return null
   return props.provider.itemById?.(id) ?? props.items.find((it) => it.id === id) ?? null
@@ -29,17 +28,19 @@ function close() {
   router.replace({ query: rest })
 }
 
-// Compare: picked ids live in a shared store; the open dialog is in the URL (?cmp=id,id).
+// The open comparison is in the URL (?cmp=id,id); ProviderView's selection bar starts it.
 const lookup = (id: string) => props.provider.itemById?.(id) ?? props.items.find((it) => it.id === id)
-const picked = computed(() => comparing.value.map(lookup).filter((it): it is CosmeticItem => !!it))
 const cmpItems = computed(() =>
   typeof route.query.cmp === 'string' ? route.query.cmp.split(',').map(lookup).filter((it): it is CosmeticItem => !!it) : [],
 )
-const openCompare = () => router.replace({ query: { ...route.query, cmp: comparing.value.join(',') } })
 function closeCompare() {
   const { cmp: _, ...rest } = route.query
   router.replace({ query: rest })
 }
+
+// Gray: unselected while a selection exists; or in the scope (selected, or everything when nothing is selected) but failing the filter.
+const grayOf = (id: string) =>
+  props.selected.size > 0 ? !props.selected.has(id) || (!!props.passes && !props.passes.has(id)) : !!props.passes && !props.passes.has(id)
 
 onMounted(() => renderer.attach(container.value!))
 onBeforeUnmount(() => renderer.detach())
@@ -53,27 +54,19 @@ onBeforeUnmount(() => renderer.detach())
         :key="it.id"
         :provider="provider"
         :item="it"
-        :comparing="comparing.includes(it.id)"
+        :selected="selected.has(it.id)"
+        :gray="grayOf(it.id)"
+        :selecting="selected.size > 0"
         @open="openItem(it)"
-        @compare="toggleCompare(it.id)"
+        @select="$emit('select', it.id)"
       />
     </div>
   </div>
-  <div v-if="picked.length" class="tray">
-    <span class="t">Compare</span>
-    <Chip v-for="it in picked" :key="it.id" :label="it.name" removable @remove="toggleCompare(it.id)" />
-    <span v-if="picked.length < 2" class="hint">pick at least 2 (up to 4)</span>
-    <Button label="Compare" icon="pi pi-clone" size="small" :disabled="picked.length < 2" @click="openCompare" />
-    <Button label="Clear" size="small" text severity="secondary" @click="comparing = []" />
-  </div>
   <CompareDialog :provider="provider" :items="cmpItems" :visible="cmpItems.length > 1" @close="closeCompare" />
-  <CosmeticModal :provider="provider" :item="selected" @close="close" />
+  <CosmeticModal :provider="provider" :item="opened" @close="close" />
 </template>
 
 <style scoped>
 .grid-wrap { position: relative; flex: 1; overflow: auto; }
 .grid { padding: 1rem; display: grid; gap: 0.75rem; }
-.tray { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; padding: 0.6rem 1rem; border-top: 1px solid var(--p-surface-800); background: var(--p-surface-900); }
-.tray .t { font-weight: 600; margin-right: 0.25rem; }
-.tray .hint { opacity: 0.6; font-size: 0.85rem; }
 </style>

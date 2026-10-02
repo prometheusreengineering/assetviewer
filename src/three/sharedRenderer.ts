@@ -1,10 +1,35 @@
-import { AmbientLight, DirectionalLight, Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import {
+  AmbientLight,
+  DirectionalLight,
+  Mesh,
+  Object3D,
+  OrthographicCamera,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Scene,
+  ShaderMaterial,
+  WebGLRenderTarget,
+  WebGLRenderer,
+} from 'three'
 
 export interface Slot {
   el: HTMLElement
   object: Object3D | null
   tick?: (ms: number) => void
+  /** Draw faded to gray (unselected / filtered-out cards). */
+  gray?: boolean
 }
+
+// Gray slots are rendered to an offscreen target first, then drawn desaturated and translucent.
+const GRAY_VERT = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }'
+const GRAY_FRAG = `
+uniform sampler2D map; varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(map, vUv);
+  float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+  gl_FragColor = vec4(vec3(l), c.a * 0.4);
+  #include <colorspace_fragment>
+}`
 
 /**
  * One WebGL context for the whole grid. A zero-height sticky wrapper keeps the canvas pinned over
@@ -20,6 +45,13 @@ export class SharedRenderer {
   private wrapper: HTMLElement
   private resizeObserver?: ResizeObserver
   private raf = 0
+  private grayRt?: WebGLRenderTarget
+  private grayScene = new Scene()
+  private grayQuad = new Mesh(
+    new PlaneGeometry(1, 1),
+    new ShaderMaterial({ uniforms: { map: { value: null } }, vertexShader: GRAY_VERT, fragmentShader: GRAY_FRAG, transparent: true, depthTest: false }),
+  )
+  private grayCam = new OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private cssW = 0
   private cssH = 0
 
@@ -32,6 +64,8 @@ export class SharedRenderer {
     Object.assign(this.renderer.domElement.style, { position: 'absolute', top: '0', left: '0', display: 'block' })
     this.wrapper.appendChild(this.renderer.domElement)
 
+    this.grayScene.add(this.grayQuad)
+    this.grayQuad.frustumCulled = false
     this.scene.add(new AmbientLight(0xffffff, 2.2))
     const key = new DirectionalLight(0xffffff, 1.4)
     key.position.set(-2, 3, -4)
@@ -77,6 +111,23 @@ export class SharedRenderer {
     this.renderer.setSize(w, h)
   }
 
+  private renderGray(r: WebGLRenderer, w: number, h: number) {
+    const pr = r.getPixelRatio()
+    const pw = Math.max(1, Math.round(w * pr))
+    const ph = Math.max(1, Math.round(h * pr))
+    const rt = (this.grayRt ??= new WebGLRenderTarget(pw, ph, { samples: 4 }))
+    if (rt.width !== pw || rt.height !== ph) rt.setSize(pw, ph)
+    r.setRenderTarget(rt)
+    r.setScissorTest(false)
+    r.setClearColor(0x000000, 0)
+    r.clear()
+    r.render(this.scene, this.camera)
+    r.setRenderTarget(null)
+    r.setScissorTest(true)
+    ;(this.grayQuad.material as ShaderMaterial).uniforms.map!.value = rt.texture
+    r.render(this.grayScene, this.grayCam)
+  }
+
   private frame = (ms: number) => {
     this.raf = requestAnimationFrame(this.frame)
     if (!this.container || !this.cssW || !this.cssH) return
@@ -100,7 +151,8 @@ export class SharedRenderer {
       obj.rotation.y = ms * 0.0008
       slot.tick?.(ms)
       this.scene.add(obj)
-      r.render(this.scene, this.camera)
+      if (slot.gray) this.renderGray(r, rect.width, rect.height)
+      else r.render(this.scene, this.camera)
       this.scene.remove(obj)
     }
   }

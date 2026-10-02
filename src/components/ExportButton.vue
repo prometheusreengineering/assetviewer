@@ -8,7 +8,7 @@ import { download } from '../download'
 import { formatBytes } from '../format'
 import type { CosmeticItem, CosmeticProvider } from '../providers/types'
 
-const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; name: string }>()
+const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; name: string; disabled?: boolean }>()
 
 const open = ref(false)
 const phase = ref<'confirm' | 'fetching' | 'zipping' | 'done' | 'error'>('confirm')
@@ -80,11 +80,10 @@ function cancel() {
 <template>
   <Button
     icon="pi pi-download"
-    :label="`Export (${items.length})`"
+    :label="items.length ? `Export (${items.length})` : 'Export'"
     size="small"
     severity="secondary"
-    :disabled="!items.length || !provider.sourceFiles"
-    title="Download the source files of the items shown as one zip"
+    :disabled="disabled || !items.length || !provider.sourceFiles"
     @click="start"
   />
   <Dialog :visible="open" modal header="Export as ZIP" :style="{ width: 'min(460px, 92vw)' }" @update:visible="(v: boolean) => !v && cancel()">

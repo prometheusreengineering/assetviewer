@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import ToggleSwitch from 'primevue/toggleswitch'
@@ -53,7 +52,6 @@ const autoRotate = ref(true)
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
-const skinDraft = ref(skinName.value)
 let token = 0
 
 const worn = computed(() => Object.values(outfit.value).map((id) => props.provider.itemById?.(id)).filter((x) => !!x))
@@ -109,12 +107,8 @@ async function copyLink() {
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
-function applySkin() {
-  const v = skinDraft.value.trim()
-  if (v === skinName.value) return
-  skinName.value = v
-  rebuild()
-}
+// The header's player name changed.
+watch(skinName, rebuild)
 function togglePlay() {
   if (!timeline.value) return
   playing.value = !playing.value
@@ -177,7 +171,6 @@ onBeforeUnmount(() => {
           <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded @click="togglePlay" />
           <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
         </template>
-        <InputText v-model="skinDraft" size="small" placeholder="Skin (Minecraft username)" class="skin" title="Loads the skin from mc-heads.net; empty = placeholder" @keyup.enter="applySkin" @blur="applySkin" />
         <span class="count">{{ worn.length }} worn</span>
       </div>
     </section>
@@ -200,6 +193,5 @@ onBeforeUnmount(() => {
 .controls label { display: flex; align-items: center; gap: 0.5rem; }
 .pose { width: 13rem; }
 .scrub { width: 10rem; }
-.skin { width: 13rem; }
 .count { margin-left: auto; opacity: 0.6; }
 </style>

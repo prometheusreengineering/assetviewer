@@ -15,6 +15,7 @@ import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rul
 import { providers } from '../providers'
 import { stats } from '../stats'
 import { COLLECTION_PREFIX, FAV, useCollections } from '../collections'
+import { clearSelection, MAX_COMPARE, selection, setSelection, toggleSelected } from '../selection'
 import Button from 'primevue/button'
 import type { CategoryDef, CosmeticItem, FieldDef } from '../providers/types'
 
@@ -94,6 +95,7 @@ watch(
     animStates.value = []
     rules.value = typeof q.f === 'string' ? decodeRules(q.f) : []
     sorts.value = typeof q.s === 'string' ? decodeSorts(q.s) : loadSort()
+    clearSelection()
     cancelMeasure()
   },
   { immediate: true },
@@ -194,10 +196,54 @@ watch([needsDims, allItems], async ([need]) => {
   if (!ctl.signal.aborted) dimVersion.value++
 })
 
+// Search is the only thing that hides items. Filter and sort never remove anything.
 const items = computed(() => {
   void dimVersion.value
-  return applyView(allItems.value, search.value, rules.value, sorts.value, fields.value)
+  return applyView(allItems.value, search.value, [], [], fields.value)
 })
+
+// ---- selection, filter and sort -------------------------------------------
+// One bar. The "scope" is the selection when there is one, otherwise everything shown.
+//  - sort orders the scope (the selected cards reorder among their own grid slots; unselected stay put)
+//  - filter never hides: scope items that fail are grayed out, scope items that pass move to the top
+const selectedSet = computed(() => new Set(selection.value))
+const ordered = computed(() => {
+  void dimVersion.value
+  if (!sorts.value.length) return items.value
+  if (!selection.value.length) return applyView(items.value, '', [], sorts.value, fields.value)
+  const sorted = applyView(items.value.filter((it) => selectedSet.value.has(it.id)), '', [], sorts.value, fields.value)
+  let k = 0
+  return items.value.map((it) => (selectedSet.value.has(it.id) ? sorted[k++]! : it))
+})
+const scope = computed(() => (selection.value.length ? ordered.value.filter((it) => selectedSet.value.has(it.id)) : ordered.value))
+// Ids of the scope items that pass the filter (null = no filter).
+const passes = computed<Set<string> | null>(() =>
+  rules.value.length ? new Set(applyView(scope.value, '', rules.value, [], fields.value).map((it) => it.id)) : null,
+)
+const displayItems = computed(() => {
+  const p = passes.value
+  if (!p) return ordered.value
+  const top = ordered.value.filter((it) => p.has(it.id))
+  return [...top, ...ordered.value.filter((it) => !p.has(it.id))]
+})
+// What Export and Compare act on: the scope items that pass the filter, in shown order.
+const actionItems = computed(() => (passes.value ? scope.value.filter((it) => passes.value!.has(it.id)) : scope.value))
+const allSelected = computed(() => items.value.length > 0 && items.value.every((it) => selectedSet.value.has(it.id)))
+const toggleSelectAll = () => (allSelected.value ? clearSelection() : setSelection(items.value.map((it) => it.id)))
+const canCompare = computed(() => selection.value.length > 0 && actionItems.value.length >= 2 && actionItems.value.length <= MAX_COMPARE)
+const compareHint = computed(() => {
+  if (!selection.value.length) return 'Tick 2 to ' + MAX_COMPARE + ' cards to compare them side by side'
+  const n = actionItems.value.length
+  if (n < 2) return `Needs at least 2 selected items${passes.value ? ' that pass the filter' : ''} (${n} now). Tick more cards${passes.value ? ' or adjust the filter' : ''}.`
+  if (n > MAX_COMPARE) return `At most ${MAX_COMPARE} items can be compared (${n} selected). Untick some cards or narrow the selection with a filter.`
+  return 'Compare side by side'
+})
+const exportHint = computed(() => {
+  if (!selection.value.length) return 'Tick cards (or use Select all) to export their source files as a ZIP'
+  if (!actionItems.value.length) return 'None of the selected items pass the filter. Adjust or clear the filter, or select more cards.'
+  return `Export the source files of ${actionItems.value.length} item(s) as a ZIP`
+})
+const compare = () => router.replace({ query: { ...route.query, cmp: actionItems.value.map((it) => it.id).join(',') } })
 
 // Cards per row (zoom): fewer columns means bigger previews.
 const COLS_KEY = 'assetviewer.cols'
@@ -276,12 +322,27 @@ const menuModel = computed(() => {
           <Button icon="pi pi-upload" size="small" text severity="secondary" title="Import JSON" @click="importInput?.click()" />
           <input ref="importInput" type="file" accept="application/json,.json" hidden @change="importCollections" />
         </template>
-        <ExportButton :provider="provider" :items="items" :name="collection?.name ?? category ?? 'export'" />
+        <Button :label="allSelected ? 'Deselect all' : 'Select all'" :icon="allSelected ? 'pi pi-minus-circle' : 'pi pi-check-square'" size="small" severity="secondary" :disabled="!items.length" @click="toggleSelectAll" />
+        <!-- Selection actions are always there; they gray out (with a tooltip saying why) until they can work. -->
+        <span :title="compareHint"><Button label="Compare" icon="pi pi-clone" size="small" :disabled="!canCompare" @click="compare" /></span>
+        <span :title="exportHint"><ExportButton :provider="provider" :items="selection.length ? actionItems : []" :disabled="!selection.length" :name="`${collection?.name ?? category ?? 'export'}_selection`" /></span>
+        <template v-if="selection.length">
+          <strong class="selcount">{{ actionItems.length }} selected</strong>
+          <Button label="Clear" size="small" text severity="secondary" @click="clearSelection" />
+        </template>
         <span class="count">{{ items.length }} items</span>
         <label class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
         </FilterBar>
       </div>
-      <CosmeticGrid :key="provider.id + category" :provider="provider" :items="items" :cols="cols" />
+      <CosmeticGrid
+        :key="provider.id + category"
+        :provider="provider"
+        :items="displayItems"
+        :cols="cols"
+        :selected="selectedSet"
+        :passes="passes"
+        @select="toggleSelected"
+      />
       </template>
     </section>
   </div>
@@ -296,6 +357,7 @@ const menuModel = computed(() => {
 .side :deep(.cat-active .p-menu-item-content) { background: var(--p-surface-800); color: var(--p-primary-color); }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--p-surface-800); }
+.selcount { color: var(--p-primary-color); }
 .ms { min-width: 12rem; max-width: 22rem; }
 .anim { min-width: 11rem; }
 .count { margin-left: auto; opacity: 0.6; }
