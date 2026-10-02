@@ -96,17 +96,24 @@ function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLamb
   const geo = new BoxGeometry(cube.size[0] + inf * 2, cube.size[1] + inf * 2, cube.size[2] + inf * 2)
   const rects = faceRects(cube)
   const uvs: number[] = []
-  for (const f of FACE_ORDER) {
+  const faces = geo.getIndex()!
+  const keep: number[] = []
+  FACE_ORDER.forEach((f, i) => {
     const r = rects[f]
-    if (!r) {
+    // Faces without texture area (the edges of flat planes, faces the model leaves out) are dropped: drawn,
+    // they sample one texel and outline every flat part with a hairline once the cube is inflated.
+    if (!r || !r[2] || !r[3]) {
       uvs.push(0, 0, 0, 0, 0, 0, 0, 0)
-      continue
+      return
     }
     const [u, v, w, h] = r
     // vertex order per face as seen from outside: TL, TR, BL, BR
     uvs.push(u / texW, v / texH, (u + w) / texW, v / texH, u / texW, (v + h) / texH, (u + w) / texW, (v + h) / texH)
-  }
+    for (let k = 0; k < 6; k++) keep.push(faces.getX(i * 6 + k))
+  })
   geo.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+  geo.setIndex(keep)
+  geo.clearGroups()
   return new Mesh(geo, material)
 }
 
