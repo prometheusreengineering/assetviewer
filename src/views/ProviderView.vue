@@ -10,6 +10,9 @@ import FilterBar from '../components/FilterBar.vue'
 import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { autoRotate } from '../viewPrefs'
+import HomeView from '../components/HomeView.vue'
+import ProviderSwitch from '../components/ProviderSwitch.vue'
+import SideControls from '../components/SideControls.vue'
 import OutfitBuilder from '../components/OutfitBuilder.vue'
 import ExportButton from '../components/ExportButton.vue'
 import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rule, type SortKey } from '../filtering'
@@ -40,10 +43,7 @@ watchEffect(async () => {
     if (st) stats.value = { name: provider.value.name, ...st }
     ready.value = true
     if (props.category === 'all-files') return void router.replace(`/${props.provider}/everything`)
-    if (!props.category && categories.value[0]) {
-      const first = categories.value.find((c) => c.id === 'hat') ?? categories.value[0]
-      router.replace(`/${props.provider}/${first.id}`)
-    }
+    if (!props.category) router.replace(`/${props.provider}/home`)
   } catch (e) {
     error.value = String(e)
   }
@@ -51,7 +51,8 @@ watchEffect(async () => {
 
 const isOutfit = computed(() => props.category === 'outfit')
 // Pages that are not an item grid.
-const isTool = computed(() => isOutfit.value)
+const isHome = computed(() => props.category === 'home')
+const isTool = computed(() => isOutfit.value || isHome.value)
 const collections = computed(() => useCollections(props.provider))
 const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX) ? collections.value.get(props.category.slice(COLLECTION_PREFIX.length)) : undefined))
 
@@ -280,6 +281,10 @@ const menuModel = computed(() => {
     })
   }
   const model = [...groups].map(([label, items]) => ({ label, items }))
+  const home = { label: 'Home', icon: 'pi pi-home', class: props.category === 'home' ? 'cat-active' : '', command: () => void router.push(`/${props.provider}/home`) }
+  const top = model.find((g) => g.label === '')
+  if (top) top.items.unshift(home)
+  else model.unshift({ label: '', items: [home] })
   const tools = model.findIndex((g) => g.label === 'Tools')
   const toolsGroup = tools < 0 ? undefined : model.splice(tools, 1)[0]
   if (provider.value.available) {
@@ -298,18 +303,24 @@ const menuModel = computed(() => {
 </script>
 
 <template>
-  <div v-if="!provider.available" class="center">
-    <div>
-      <h2>{{ provider.name }} is coming soon</h2>
-      <p>This section will use its own models, fields and filters.</p>
-    </div>
-  </div>
-  <Message v-else-if="error" severity="error" class="m">{{ error }}</Message>
-  <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
-  <div v-else class="layout">
-    <aside class="side"><Menu :model="menuModel" /></aside>
+  <div class="layout">
+    <aside class="side">
+      <ProviderSwitch :provider="provider.id" />
+      <div class="side-menu"><Menu v-if="ready" :model="menuModel" /></div>
+      <SideControls />
+    </aside>
     <section class="main">
-      <OutfitBuilder v-if="isOutfit" :provider="provider" />
+      <div v-if="!provider.available" class="center">
+        <div>
+          <h2>{{ provider.name }} is coming soon</h2>
+          <p>This section will use its own models, fields and filters.</p>
+        </div>
+      </div>
+      <Message v-else-if="error" severity="error" class="m">{{ error }}</Message>
+      <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
+      <template v-else>
+      <HomeView v-if="isHome" :provider="provider.id" :name="provider.name" :categories="categories" />
+      <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
       <template v-else>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
@@ -350,6 +361,7 @@ const menuModel = computed(() => {
         @select="toggleSelected"
       />
       </template>
+      </template>
     </section>
   </div>
 </template>
@@ -358,7 +370,8 @@ const menuModel = computed(() => {
 .center { display: grid; place-items: center; flex: 1; text-align: center; }
 .m { margin: 1rem; }
 .layout { display: flex; flex: 1; min-height: 0; }
-.side { width: 230px; overflow-y: auto; padding: 0.75rem; border-right: 1px solid var(--av-border); }
+.side { width: 250px; display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem; border-right: 1px solid var(--av-border); }
+.side-menu { flex: 1; min-height: 0; overflow-y: auto; }
 .side :deep(.p-menu) { width: 100%; border: 0; background: transparent; }
 .side :deep(.cat-active .p-menu-item-content) { background: var(--av-border); color: var(--p-primary-color); }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
