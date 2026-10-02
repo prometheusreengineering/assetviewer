@@ -328,23 +328,24 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           </template>
         </div>
       </template>
-      <div class="row">
-        <Button v-if="downloadOptions.length" size="small" severity="secondary" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
+      <div class="row buttons">
+        <Button v-if="downloadOptions.length" size="small" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
           <i class="pi pi-download" />
           <span>Download</span>
           <i class="pi pi-chevron-down chev" />
         </Button>
-        <Menu ref="downloadMenu" :model="downloadOptions" popup class="dl-menu">
-          <template #item="{ item }">
-            <a class="dl-item">
-              <i :class="item.icon" />
-              <span class="dl-text"><span class="dl-label">{{ item.label }}</span><span class="dl-sub">{{ (item as { sub?: string }).sub }}</span></span>
-            </a>
-          </template>
-        </Menu>
-        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" severity="secondary" @click="copyLink" />
+        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" @click="copyLink" />
       </div>
     </div>
+    <!-- Outside the button row: its placeholder element added an extra gap there. -->
+    <Menu ref="downloadMenu" :model="downloadOptions" popup class="dl-menu">
+      <template #item="{ item }">
+        <a class="dl-item">
+          <i :class="item.icon" />
+          <span class="dl-text"><span class="dl-label">{{ item.label }}</span><span class="dl-sub">{{ (item as { sub?: string }).sub }}</span></span>
+        </a>
+      </template>
+    </Menu>
     <dl v-if="infoRows.length" class="info">
       <div v-for="[k, v] in infoRows" :key="k" class="pair" :class="{ wide: v.length > 36 }">
         <dt>{{ k }}</dt>
@@ -362,6 +363,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .err { position: absolute; inset: 0; display: grid; place-items: center; color: var(--p-red-400); }
 .actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.75rem; }
 .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.row.buttons { gap: 0.6rem; }
 .scrub { width: 10rem; }
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
 .pose { width: 12rem; }
