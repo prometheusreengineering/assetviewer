@@ -160,6 +160,12 @@ export class SharedRenderer {
       this.scene.add(obj)
       if (slot.gray) this.renderGray(r, rect.width, rect.height)
       else r.render(this.scene, this.camera)
+      // This canvas sits above the cards, so a model would cover the card's checkbox (top left) and bookmark
+      // (top right): cut those corners out so the buttons show through.
+      for (const [cx, cw] of [[x, 36], [x + rect.width - 56, 56]] as const) {
+        r.setScissor(cx, y + rect.height - 40, cw, 40)
+        r.clearColor()
+      }
       this.scene.remove(obj)
     }
   }

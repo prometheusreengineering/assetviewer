@@ -10,6 +10,7 @@ import {
   NearestFilter,
   Object3D,
   SRGBColorSpace,
+  ShaderChunk,
   Texture,
 } from 'three'
 
@@ -60,7 +61,27 @@ export function createTexture(bitmap: ImageBitmap): Texture {
 }
 
 export function createMaterial(map: Texture) {
-  return new MeshLambertMaterial({ map, alphaTest: 0.3, alphaToCoverage: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
+  const m = new MeshLambertMaterial({ map, alphaTest: 0.3, alphaToCoverage: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
+  // Cut-outs use the full-resolution texel's alpha. Mipmapped alpha blends in opaque texels from the next atlas
+  // region once a texture is minified, which drew a dotted outline around every partly transparent face (leaf
+  // wings on a 1024 px sheet). Colour still comes from the mipmapped sample, so distant parts don't shimmer.
+  // With MSAA, an edge pixel's centre can lie outside the triangle and its UV is extrapolated into the next
+  // region; centroid interpolation keeps it inside.
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader.replace('#include <uv_pars_vertex>', ShaderChunk.uv_pars_vertex.replace('varying vec2 vMapUv', 'centroid varying vec2 vMapUv'))
+    s.fragmentShader = s.fragmentShader.replace('#include <uv_pars_fragment>', ShaderChunk.uv_pars_fragment.replace('varying vec2 vMapUv', 'centroid varying vec2 vMapUv'))
+    s.fragmentShader = s.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+#ifdef USE_MAP
+  {
+    ivec2 size = textureSize(map, 0);
+    diffuseColor.a = opacity * texelFetch(map, clamp(ivec2(floor(vMapUv * vec2(size))), ivec2(0), size - 1), 0).a;
+  }
+#endif`,
+    )
+  }
+  return m
 }
 
 function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
@@ -91,7 +112,7 @@ function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]
 }
 
 // Coplanar faces from overlapping cubes z-fight; a tiny per-cube growth breaks the tie deterministically.
-function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number): Mesh {
+function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number, flipU: boolean): Mesh {
   const inf = (cube.inflate ?? 0) + (index % 40) * 0.008
   // Some models mirror a cube by giving it negative sizes (paired with a plain copy for two-sided faces); a
   // negative BoxGeometry would put every face texture on the opposite side, leaving sides see-through.
@@ -108,7 +129,8 @@ function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLamb
       uvs.push(0, 0, 0, 0, 0, 0, 0, 0)
       return
     }
-    const [u, v, w, h] = r
+    let [u, v, w, h] = r
+    if (flipU) [u, w] = [u + w, -w]
     // vertex order per face as seen from outside: TL, TR, BL, BR
     uvs.push(u / texW, v / texH, (u + w) / texW, v / texH, u / texW, (v + h) / texH, (u + w) / texW, (v + h) / texH)
     for (let k = 0; k < 6; k++) keep.push(faces.getX(i * 6 + k))
@@ -135,8 +157,13 @@ export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Obje
   return buildGeoRig(geo, material).root
 }
 
-/** Like buildGeoModel, but also returns the bone groups so they can be animated. */
-export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root: Object3D; bones: Map<string, Bone> } {
+/**
+ * Like buildGeoModel, but also returns the bone groups so they can be animated. `flipU` mirrors every face's
+ * texture horizontally: for models the caller will mirror as a whole (Bedrock geometry is x-mirrored), so the
+ * artwork ends up the right way round again. Without it, strips whose art continues across a hinge (butterfly
+ * wings) showed every strip flipped in place and the wing fell apart into gaps.
+ */
+export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU = false): { root: Object3D; bones: Map<string, Bone> } {
   const g = geo['minecraft:geometry'][0]
   const texW = g.description.texture_width ?? 16
   const texH = g.description.texture_height ?? 16
@@ -170,7 +197,7 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial): { root
     if (bone.parent && !groups.has(bone.parent)) group.userData.missingParent = bone.parent
 
     for (const cube of bone.cubes ?? []) {
-      const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material, cubeIndex++)
+      const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material, cubeIndex++, flipU)
       const center = [
         cube.origin[0] + cube.size[0] / 2,
         cube.origin[1] + cube.size[1] / 2,

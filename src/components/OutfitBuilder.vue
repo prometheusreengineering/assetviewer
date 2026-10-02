@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { useRoute, useRouter } from 'vue-router'
 import type { CosmeticProvider, Timeline } from '../providers/types'
 import { skinName } from '../skin'
-import { autoRotate } from '../viewPrefs'
+import { autoRotate, freeRotate } from '../viewPrefs'
 import { Viewer } from '../three/viewer'
 
 const props = defineProps<{ provider: CosmeticProvider }>()
@@ -84,6 +84,7 @@ watch([outfit, emoteId], ([o, e]) => {
   rebuild()
 }, { deep: true })
 watch(autoRotate, (v) => viewer && (viewer.autoRotate = v))
+watch(freeRotate, (v) => viewer?.setFreeRotate(v))
 
 function setSlot(cat: string, id: string | null) {
   const o = { ...outfit.value }
@@ -91,13 +92,29 @@ function setSlot(cat: string, id: string | null) {
   else delete o[cat]
   outfit.value = o
 }
+// Slots left out of "Random" (the dice on each row). Stored as exclusions so new slots start included.
+const RANDOM_KEY = 'assetviewer.outfit.random'
+const noRandom = ref(new Set<string>())
+try {
+  const v = JSON.parse(localStorage.getItem(RANDOM_KEY) ?? '[]')
+  if (Array.isArray(v)) noRandom.value = new Set(v.filter((x) => typeof x === 'string'))
+} catch {}
+function toggleRandom(cat: string) {
+  const s = new Set(noRandom.value)
+  if (s.has(cat)) s.delete(cat)
+  else s.add(cat)
+  noRandom.value = s
+  try {
+    localStorage.setItem(RANDOM_KEY, JSON.stringify([...s]))
+  } catch {}
+}
 function randomize() {
-  // One random item in a few common slots; the rest are left empty.
-  const pick = ['hat', 'cloak', 'dragon_wings', 'backpack', 'shoes', 'neckwear'].filter((c) => slots.value.some((s) => s.id === c))
-  const o: Outfit = {}
-  for (const c of pick) {
-    const list = props.provider.items(c)
-    if (list.length && Math.random() < 0.8) o[c] = list[Math.floor(Math.random() * list.length)]!.id
+  // Every included slot gets a random item; excluded slots keep what they have.
+  const o: Outfit = { ...outfit.value }
+  for (const s of slots.value) {
+    if (noRandom.value.has(s.id)) continue
+    const list = props.provider.items(s.id)
+    if (list.length) o[s.id] = list[Math.floor(Math.random() * list.length)]!.id
   }
   outfit.value = o
 }
@@ -121,7 +138,7 @@ function seek(v: number | number[]) {
 }
 
 onMounted(() => {
-  viewer = new Viewer(host.value!)
+  viewer = new Viewer(host.value!, freeRotate.value)
   viewer.autoRotate = autoRotate.value
   viewer.onFrame = (m) => {
     const tl = m.timeline
@@ -140,12 +157,22 @@ onBeforeUnmount(() => {
   <div class="outfit">
     <aside class="slots">
       <div class="head">
-        <Button label="Random" icon="pi pi-sparkles" size="small" severity="secondary" @click="randomize" />
-        <Button label="Clear" icon="pi pi-times" size="small" severity="secondary" text :disabled="!worn.length" @click="outfit = {}" />
-        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
+        <Button label="Random" icon="pi pi-sparkles" size="small" severity="secondary" :disabled="noRandom.size >= slots.length" title="Fill every slot whose dice is on with a random item" @click="randomize" />
+        <Button label="Clear" icon="pi pi-times" size="small" severity="secondary" :disabled="!worn.length" @click="outfit = {}" />
+        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" severity="secondary" @click="copyLink" />
       </div>
-      <label v-for="s in slots" :key="s.id" class="slot">
-        <span><i :class="['pi', s.icon]" /> {{ s.label }}</span>
+      <div v-for="s in slots" :key="s.id" class="slot">
+        <span class="icon-text"><i :class="['pi', s.icon]" />{{ s.label }}</span>
+        <button
+          type="button"
+          class="dice"
+          :class="{ off: noRandom.has(s.id) }"
+          :title="noRandom.has(s.id) ? 'Not randomized: click to include in Random' : 'Randomized: click to keep this slot when pressing Random'"
+          :aria-pressed="!noRandom.has(s.id)"
+          @click="toggleRandom(s.id)"
+        >
+          <i class="pi pi-sparkles" />
+        </button>
         <Select
           :model-value="outfit[s.id] ?? null"
           :options="optionsFor(s.id)"
@@ -159,7 +186,7 @@ onBeforeUnmount(() => {
           class="pick"
           @update:model-value="(v: string | null) => setSlot(s.id, v)"
         />
-      </label>
+      </div>
     </aside>
     <section class="stage">
       <div ref="host" class="canvas" />
@@ -167,6 +194,7 @@ onBeforeUnmount(() => {
       <p v-if="error" class="err">{{ error }}</p>
       <div class="controls">
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
+        <label title="On: rotate freely in any direction. Off: stay upright (also applies to the preview and compare views)"><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
         <Select v-model="emoteId" :options="emoteOptions" option-label="label" option-value="value" filter show-clear size="small" placeholder="Pose: standing" class="pose" />
         <template v-if="timeline">
           <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded @click="togglePlay" />
@@ -180,10 +208,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .outfit { display: flex; flex: 1; min-height: 0; }
-.slots { width: 300px; overflow-y: auto; padding: 0.75rem 1rem; border-right: 1px solid var(--av-border); display: flex; flex-direction: column; gap: 0.5rem; }
-.head { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.25rem; }
-.slot { display: grid; grid-template-columns: 7.5rem 1fr; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
-.slot span { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slots { width: 330px; overflow-y: auto; padding: 0.75rem 1rem; border-right: 1px solid var(--av-border); display: flex; flex-direction: column; gap: 0.5rem; }
+.head { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.25rem; }
+.slot { display: grid; grid-template-columns: 6.5rem auto 1fr; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.dice { display: grid; place-items: center; width: 1.7rem; height: 1.7rem; padding: 0; border: 1px solid var(--av-border); border-radius: 6px; background: var(--av-card); color: var(--p-primary-color); cursor: pointer; }
+.dice:hover { background: var(--av-hover); }
+.dice.off { color: var(--av-text); opacity: 0.35; border-style: dashed; }
+.dice .pi { font-size: 0.75rem; opacity: 1; }
+.slot > span { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .slot .pi { font-size: 0.8rem; opacity: 0.7; }
 .pick { min-width: 0; }
 .stage { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }

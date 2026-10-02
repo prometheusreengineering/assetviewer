@@ -22,7 +22,7 @@ function pick(id: string) {
   <div>
     <button class="switch" aria-haspopup="true" @click="(e) => pop?.toggle(e)">
       <i :class="current.icon" class="lead" />
-      <span class="txt"><strong>{{ current.label }}</strong><small>Switch game / mod</small></span>
+      <span class="txt"><strong>{{ current.label }}</strong></span>
       <i class="pi pi-chevron-down" />
     </button>
     <Popover ref="pop">

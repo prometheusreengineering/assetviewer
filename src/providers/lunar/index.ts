@@ -173,6 +173,7 @@ async function buildRig(
   files: DownloadFile[],
   raw = false,
   prep?: (root: Object3D) => void,
+  flipU = false,
 ): Promise<Rig> {
   const bitmap = await toBitmap(texBuf, false)
   const tex = createTexture(bitmap)
@@ -182,7 +183,7 @@ async function buildRig(
   const frames = Math.max(1, Math.round(bitmap.height / bitmap.width / aspect))
   tex.repeat.y = 1 / frames
   const material = createMaterial(tex)
-  const { root, bones } = buildGeoRig(geo, material)
+  const { root, bones } = buildGeoRig(geo, material, flipU)
   prep?.(root)
   const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
   // Fit the first frame of the default animation (parts it hides don't count), not the static model.
@@ -256,7 +257,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
       root.userData.attachedBone = raw.attached_bone
       // Player parts this cosmetic replaces (a robotic arm hides the arm under it).
       root.userData.hideParts = (['head', 'body', 'right_arm', 'left_arm', 'right_leg', 'left_leg'] as const).filter((p) => raw[`hide_${p}`] === true)
-    }),
+    }, true),
   )
 }
 

@@ -329,7 +329,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         </div>
       </template>
       <div class="row">
-        <Button v-if="downloadOptions.length" size="small" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
+        <Button v-if="downloadOptions.length" size="small" severity="secondary" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
           <i class="pi pi-download" />
           <span>Download</span>
           <i class="pi pi-chevron-down chev" />
@@ -342,7 +342,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
             </a>
           </template>
         </Menu>
-        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
+        <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" severity="secondary" @click="copyLink" />
       </div>
     </div>
     <dl v-if="infoRows.length" class="info">
@@ -365,7 +365,6 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .scrub { width: 10rem; }
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
 .pose { width: 12rem; }
-.chev { font-size: 0.7rem; margin-left: 0.15rem; }
 .dl-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.9rem; cursor: pointer; }
 .dl-item:hover { background: var(--av-border); }
 .dl-text { display: flex; flex-direction: column; }

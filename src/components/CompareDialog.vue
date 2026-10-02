@@ -2,9 +2,10 @@
 import Dialog from 'primevue/dialog'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { AmbientLight, DirectionalLight, MOUSE, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { autoRotate } from '../viewPrefs'
+import { autoRotate, freeRotate } from '../viewPrefs'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import AnimatedImage from './AnimatedImage.vue'
 
@@ -30,7 +31,7 @@ const sync = ref(true)
 // ONE renderer and ONE camera for all panes (scissored viewports), so rotate/pan/zoom stay in sync.
 let renderer: WebGLRenderer | undefined
 let camera: PerspectiveCamera | undefined
-let controls: TrackballControls | undefined
+let controls: TrackballControls | OrbitControls | undefined
 let raf = 0
 let token = 0
 
@@ -46,6 +47,33 @@ function teardown() {
   panes.value = []
 }
 
+// Trackball (free rotate) or orbit (upright) controls, per the shared "Free rotate" preference.
+function makeControls(free: boolean) {
+  if (!renderer || !camera) return
+  controls?.dispose()
+  camera.up.set(0, 1, 0)
+  // Further back than the modal: panes are narrow.
+  camera.position.set(0, 0.6, -5.4)
+  camera.lookAt(0, 0, 0)
+  if (free) {
+    const c = new TrackballControls(camera, renderer.domElement)
+    c.rotateSpeed = 3
+    c.panSpeed = 0.1
+    c.dynamicDampingFactor = 0.1
+    controls = c
+  } else {
+    const c = new OrbitControls(camera, renderer.domElement)
+    c.enableDamping = true
+    c.dampingFactor = 0.1
+    c.maxPolarAngle = Math.PI * 0.95
+    c.minPolarAngle = Math.PI * 0.05
+    controls = c
+  }
+  controls.minDistance = 2
+  controls.maxDistance = 9
+}
+watch(freeRotate, makeControls)
+
 async function open() {
   teardown()
   const mine = token
@@ -60,15 +88,8 @@ async function open() {
   Object.assign(r.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%' })
   host.appendChild(r.domElement)
   camera = new PerspectiveCamera(30, 1, 1, 12)
-  // Further back than the modal: panes are narrow.
-  camera.position.set(0, 0.6, -5.4)
-  const c = (controls = new TrackballControls(camera, r.domElement))
-  c.rotateSpeed = 3
-  c.panSpeed = 0.1
-  c.dynamicDampingFactor = 0.1
-  c.minDistance = 2
-  c.maxDistance = 9
-  r.domElement.addEventListener('pointerdown', (e) => (c.mouseButtons.LEFT = e.shiftKey ? MOUSE.PAN : MOUSE.ROTATE), { capture: true })
+  makeControls(freeRotate.value)
+  r.domElement.addEventListener('pointerdown', (e) => controls && (controls.mouseButtons.LEFT = e.shiftKey ? MOUSE.PAN : MOUSE.ROTATE), { capture: true })
 
   await Promise.all(
     panes.value.map(async (p, i) => {
@@ -102,9 +123,9 @@ async function open() {
     const size = r.getSize(new Vector2())
     if (size.x !== w || size.y !== h) {
       r.setSize(w, h, false)
-      c.handleResize()
+      if (controls instanceof TrackballControls) controls.handleResize()
     }
-    c.update()
+    controls?.update()
     r.setScissorTest(false)
     r.clear()
     r.setScissorTest(true)
@@ -165,6 +186,7 @@ const rows = computed(() => {
     </div>
     <div class="actions">
       <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
+      <label title="On: rotate freely in any direction. Off: stay upright"><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
       <label title="Play animations in step"><ToggleSwitch v-model="sync" /> Sync animations</label>
       <span class="hint">Drag to rotate all, Shift+drag to move, wheel to zoom.</span>
     </div>

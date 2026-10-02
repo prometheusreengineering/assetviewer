@@ -4,6 +4,9 @@ html, body, #app { height: 100%; margin: 0; }
 :root.app-dark { --av-bg: var(--p-surface-950); --av-card: var(--p-surface-900); --av-border: var(--p-surface-800); --av-hover: var(--p-surface-800); --av-text: var(--p-surface-0); --av-stage: var(--p-surface-950); color-scheme: dark; }
 body { background: var(--av-bg); color: var(--av-text); font-family: system-ui, sans-serif; }
 * { box-sizing: border-box; }
+/* Uniform controls: an icon next to text is centred on it; a chevron marks buttons that open a menu. */
+.icon-text { display: inline-flex; align-items: center; gap: 0.4rem; }
+.chev { font-size: 0.7rem; margin-left: 0.15rem; }
 /* Selected text uses the accent color. */
 ::selection { background: var(--p-primary-color); color: var(--p-primary-contrast-color); }
 /* A pinned modal: the mask set up at open time is made see-through and click-through; only the window takes events. */

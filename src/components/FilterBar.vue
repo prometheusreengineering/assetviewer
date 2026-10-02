@@ -110,8 +110,8 @@ const clearAll = () => ((rules.value = []), (sorts.value = []), (search.value = 
 <template>
   <div class="bar">
     <InputText v-model="search" placeholder="Search names…" class="search" />
-    <Button label="Filter" icon="pi pi-filter" size="small" severity="secondary" @click="openFilter($event)" />
-    <Button label="Sort" icon="pi pi-sort-amount-down" size="small" severity="secondary" @click="openSort($event)" />
+    <Button size="small" severity="secondary" aria-haspopup="true" @click="openFilter($event)"><i class="pi pi-filter" /><span>Filter</span><i class="pi pi-chevron-down chev" /></Button>
+    <Button size="small" severity="secondary" aria-haspopup="true" @click="openSort($event)"><i class="pi pi-sort-amount-down" /><span>Sort</span><i class="pi pi-chevron-down chev" /></Button>
     <slot />
   </div>
   <div v-if="rules.length || sorts.length" class="chips">

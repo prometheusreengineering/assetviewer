@@ -49,12 +49,19 @@ watchEffect(async () => {
   }
 })
 
+const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`
 const isOutfit = computed(() => props.category === 'outfit')
 // Pages that are not an item grid.
 const isHome = computed(() => props.category === 'home')
 const isTool = computed(() => isOutfit.value || isHome.value)
 const collections = computed(() => useCollections(props.provider))
 const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX) ? collections.value.get(props.category.slice(COLLECTION_PREFIX.length)) : undefined))
+// Tab title: the page you're on, then the app.
+watchEffect(() => {
+  const c = props.category
+  const label = c === 'home' || !c ? '' : collection.value?.name ?? categories.value.find((x) => x.id === c)?.label ?? ''
+  document.title = label ? `${label} · Asset Viewer` : provider.value.available ? 'Asset Viewer – Lunar Client cosmetics viewer' : `${provider.value.name} · Asset Viewer`
+})
 
 // Categories bigger than this get a performance warning.
 const LAG_LIMIT = 500
@@ -319,27 +326,31 @@ const menuModel = computed(() => {
       <Message v-else-if="error" severity="error" class="m">{{ error }}</Message>
       <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
       <template v-else>
-      <HomeView v-if="isHome" :provider="provider.id" :name="provider.name" :categories="categories" />
+      <HomeView v-if="isHome" :name="provider.name" />
       <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
       <template v-else>
+      <div v-if="collection" class="collbar">
+        <h2 class="collname icon-text"><i class="pi pi-bookmark-fill" />{{ collection.name }}</h2>
+        <span class="collcount">{{ plural(collection.items.length, 'item') }}</span>
+        <span class="collactions">
+          <Button label="Rename" icon="pi pi-pencil" size="small" severity="secondary" @click="renameCollection" />
+          <Button v-if="collection.id !== 'fav'" label="Delete" icon="pi pi-trash" size="small" severity="secondary" @click="deleteCollection" />
+          <Button label="Export" icon="pi pi-download" size="small" severity="secondary" title="Export this collection as JSON" @click="exportCollection" />
+          <Button label="Import" icon="pi pi-upload" size="small" severity="secondary" title="Import collections from JSON" @click="importInput?.click()" />
+          <input ref="importInput" type="file" accept="application/json,.json" hidden @change="importCollections" />
+        </span>
+      </div>
       <div class="toolbar">
         <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
-        <template v-if="collection">
-          <Button icon="pi pi-pencil" size="small" text severity="secondary" title="Rename" @click="renameCollection" />
-          <Button v-if="collection.id !== 'fav'" icon="pi pi-trash" size="small" text severity="secondary" title="Delete collection" @click="deleteCollection" />
-          <Button icon="pi pi-download" size="small" text severity="secondary" title="Export as JSON" @click="exportCollection" />
-          <Button icon="pi pi-upload" size="small" text severity="secondary" title="Import JSON" @click="importInput?.click()" />
-          <input ref="importInput" type="file" accept="application/json,.json" hidden @change="importCollections" />
-        </template>
         <Button :label="allSelected ? 'Deselect all' : 'Select all'" :icon="allSelected ? 'pi pi-minus-circle' : 'pi pi-check-square'" size="small" severity="secondary" :disabled="!items.length" @click="toggleSelectAll" />
         <!-- Selection actions are always there; they gray out (with a tooltip saying why) until they can work. -->
-        <span :title="compareHint"><Button label="Compare" icon="pi pi-clone" size="small" :disabled="!canCompare" @click="compare" /></span>
+        <span :title="compareHint"><Button label="Compare" icon="pi pi-clone" size="small" severity="secondary" :disabled="!canCompare" @click="compare" /></span>
         <span :title="exportHint"><ExportButton :provider="provider" :items="selection.length ? actionItems : []" :disabled="!selection.length" :name="`${collection?.name ?? category ?? 'export'}_selection`" /></span>
         <template v-if="selection.length">
           <strong class="selcount">{{ actionItems.length }} selected</strong>
           <Button label="Clear" size="small" text severity="secondary" @click="clearSelection" />
         </template>
-        <span class="count">{{ items.length }} items</span>
+        <span class="count">{{ plural(items.length, 'item') }}</span>
         <SelectButton v-model="view" :options="VIEWS" option-value="value" option-label="title" :allow-empty="false" size="small" aria-label="View">
           <template #option="{ option }"><i :class="option.icon" :title="option.title" /></template>
         </SelectButton>
@@ -377,6 +388,11 @@ const menuModel = computed(() => {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--av-border); }
 .lag { margin: 0.5rem 1rem 0; }
+.collbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--av-border); background: var(--av-card); }
+.collname { margin: 0; font-size: 1.2rem; line-height: 1; gap: 0.6rem; }
+.collname .pi { color: var(--p-primary-color); font-size: 1.1rem; }
+.collcount { opacity: 0.6; }
+.collactions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .selcount { color: var(--p-primary-color); }
 .ms { min-width: 12rem; max-width: 22rem; }
 .count { margin-left: auto; opacity: 0.6; }

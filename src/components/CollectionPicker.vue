@@ -55,7 +55,7 @@ function create() {
       :title="selected.length ? `In ${selected.length} collection(s)` : 'Add to a collection'"
       @click="toggle"
     >
-      <i class="pi pi-bookmark" />
+      <i :class="selected.length ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'" />
       <span class="n">{{ selected.length }}</span>
     </Button>
     <Popover ref="pop" @show="emit('open', true)" @hide="emit('open', false)">

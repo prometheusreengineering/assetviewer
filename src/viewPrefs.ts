@@ -22,4 +22,4 @@ function stored(key: string, fallback: boolean): Ref<boolean> {
 
 export const autoRotate = stored('assetviewer.autoRotate', true)
 export const wireframe = stored('assetviewer.wireframe', false)
-export const freeRotate = stored('assetviewer.freeRotate', true)
+export const freeRotate = stored('assetviewer.freeRotate', false)
