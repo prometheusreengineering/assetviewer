@@ -9,6 +9,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import vTooltip from 'primevue/tooltip'
 import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue'
 import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
@@ -29,6 +30,8 @@ const loading = ref(false)
 const error = ref('')
 const wireframe = ref(false)
 const autoRotate = ref(true)
+// Free = trackball (any angle, can flip upside down); capped = orbit (stays upright, poles clamped).
+const freeRotate = ref(true)
 const hasModel = ref(false)
 const states = ref<string[]>([])
 const state = ref('')
@@ -45,7 +48,9 @@ const emoteOptions = computed(() => (canDress.value ? props.provider.items('emot
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
-let controls: TrackballControls | undefined
+type Controls = TrackballControls | OrbitControls
+let controls: Controls | undefined
+let swapControls: ((free: boolean) => void) | undefined
 let raf = 0
 let token = 0
 const animState = inject<Ref<string> | undefined>('animState', undefined)
@@ -64,6 +69,7 @@ function teardown() {
   model = undefined
   renderer = undefined
   controls = undefined
+  swapControls = undefined
   hasModel.value = false
   imgSrc.value = ''
   imgFrames.value = undefined
@@ -94,9 +100,10 @@ async function open(item: CosmeticItem) {
       return
     }
     const emote = playerEmoteId.value ? props.provider.itemById?.(playerEmoteId.value) : undefined
-    const [loaded, { TrackballControls }] = await Promise.all([
+    const [loaded, { TrackballControls }, { OrbitControls }] = await Promise.all([
       dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item),
       import('three/examples/jsm/controls/TrackballControls.js'),
+      import('three/examples/jsm/controls/OrbitControls.js'),
     ])
     await nextTick()
     const host = canvasHost.value
@@ -123,26 +130,41 @@ async function open(item: CosmeticItem) {
     r.setPixelRatio(Math.min(devicePixelRatio, 2))
     r.setSize(host.clientWidth, host.clientHeight)
     host.appendChild(r.domElement)
-    // Trackball controls rotate freely (no pole clamp, can flip upside down), unlike OrbitControls.
-    const c = new TrackballControls(camera, r.domElement)
-    controls = c
-    c.panSpeed = 0.1
-    // Shift + drag moves the model (right-drag also pans; the wheel zooms).
-    r.domElement.addEventListener(
-      'pointerdown',
-      (e) => (c.mouseButtons.LEFT = e.shiftKey ? MOUSE.PAN : MOUSE.ROTATE),
-      { capture: true },
-    )
-    c.rotateSpeed = 3
-    c.dynamicDampingFactor = 0.1
-    c.minDistance = 2
-    c.maxDistance = 9
+    // Shift + drag moves the model (right-drag also pans; the wheel zooms) in both modes.
+    const onDown = (e: PointerEvent) => {
+      if (controls) controls.mouseButtons.LEFT = e.shiftKey ? MOUSE.PAN : MOUSE.ROTATE
+    }
+    r.domElement.addEventListener('pointerdown', onDown, { capture: true })
+    swapControls = (free) => {
+      controls?.dispose()
+      camera.up.set(0, 1, 0)
+      camera.position.set(0, 0.5, -4.2)
+      if (free) {
+        const c = new TrackballControls(camera, r.domElement)
+        c.panSpeed = 0.1
+        c.rotateSpeed = 3
+        c.dynamicDampingFactor = 0.1
+        c.minDistance = 2
+        c.maxDistance = 9
+        controls = c
+      } else {
+        const c = new OrbitControls(camera, r.domElement)
+        c.enableDamping = true
+        c.dampingFactor = 0.1
+        c.minDistance = 2
+        c.maxDistance = 9
+        c.maxPolarAngle = Math.PI * 0.95
+        c.minPolarAngle = Math.PI * 0.05
+        controls = c
+      }
+    }
+    swapControls(freeRotate.value)
     let last = 0
     const loop = (ms: number) => {
       raf = requestAnimationFrame(loop)
       if (autoRotate.value && last) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
       last = ms
-      c.update()
+      controls?.update()
       loaded.tick(ms)
       // Only refresh the scrubber when it visibly moves.
       const tl = loaded.timeline
@@ -167,6 +189,7 @@ watch(wireframe, (w) => {
   })
 })
 watch(state, (s) => model?.setState(s))
+watch(freeRotate, (f) => swapControls?.(f))
 watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
 onBeforeUnmount(teardown)
 
@@ -254,6 +277,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
       <template v-if="hasModel">
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
+        <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
         <i
           v-tooltip.top="{ value: HELP, class: 'help-tip' }"
           class="pi pi-question-circle help"
