@@ -10,8 +10,19 @@ export interface Player {
   /** Adds a mesh (an emote prop) skinned to the same skeleton. */
   addMesh(m: BobjMesh, texture: ImageBitmap): SkinnedMesh
   setSkin(bitmap: ImageBitmap): void
+  /** Hides body parts a worn cosmetic replaces (gek `hide_left_arm` etc.): head, body, right_arm, left_arm, right_leg, left_leg. */
+  hideParts(parts: string[]): void
   pose(action: BobjAction | undefined, tick: number): void
   dispose(): void
+}
+
+const PART_BONES: Record<string, string[]> = {
+  head: ['head'],
+  body: ['body', 'low_body'],
+  right_arm: ['right_arm', 'low_right_arm', 'low_right_arm.end', 'low_right_arm.item'],
+  left_arm: ['left_arm', 'low_left_arm', 'low_left_arm.end', 'low_left_arm.item'],
+  right_leg: ['right_leg', 'low_leg_right'],
+  left_leg: ['left_leg', 'low_left_leg'],
 }
 
 export function createPlayer(body: BobjFile, skin: ImageBitmap): Player {
@@ -45,6 +56,17 @@ export function createPlayer(body: BobjFile, skin: ImageBitmap): Player {
       bodyMat.needsUpdate = true
       textures.push(tex)
       old.dispose()
+    },
+    hideParts(parts) {
+      const hidden = new Set(parts.flatMap((p) => PART_BONES[p] ?? []))
+      const bones = skel.skeleton.bones
+      const g = bodyMesh.geometry
+      const si = g.getAttribute('skinIndex')
+      const n = g.getAttribute('position').count
+      // Non-indexed triangles: keep the ones whose first vertex's main bone is still shown.
+      const keep: number[] = []
+      for (let i = 0; i < n; i += 3) if (!hidden.has(bones[si.getX(i)]!.name)) keep.push(i, i + 1, i + 2)
+      g.setIndex(hidden.size ? keep : null)
     },
     pose(action, tick) {
       poseSkeleton(skel, action, tick)

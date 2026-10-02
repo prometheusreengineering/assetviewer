@@ -184,9 +184,11 @@ async function buildRig(
   const material = createMaterial(tex)
   const { root, bones } = buildGeoRig(geo, material)
   prep?.(root)
+  const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
+  // Fit the first frame of the default animation (parts it hides don't count), not the static model.
+  player?.tick(0)
   // raw: keep player-space coordinates (blocks) for dressing a player.
   const object = raw ? root : fitObject(root)
-  const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
   return { object, material, bones, player, frames, frameMs: mc?.frametimeMs ?? 125, baseOffset: 0, dir: 1, files }
 }
 
@@ -211,6 +213,12 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
     texture?: string
     animation?: string
     attached_bone?: string
+    hide_head?: boolean
+    hide_body?: boolean
+    hide_right_arm?: boolean
+    hide_left_arm?: boolean
+    hide_right_leg?: boolean
+    hide_left_leg?: boolean
     transformations?: { transformType: string; values: { angle?: number; x?: number; y?: number; z?: number } }[]
     state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] }
   }>(gekHash)
@@ -246,6 +254,8 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
         if (t.transformType === 'rotate' && v.angle) root.quaternion.multiply(new Quaternion().setFromAxisAngle(new Vector3(v.x ?? 0, v.y ?? 0, v.z ?? 0).normalize(), v.angle * DEG))
       }
       root.userData.attachedBone = raw.attached_bone
+      // Player parts this cosmetic replaces (a robotic arm hides the arm under it).
+      root.userData.hideParts = (['head', 'body', 'right_arm', 'left_arm', 'right_leg', 'left_leg'] as const).filter((p) => raw[`hide_${p}`] === true)
     }),
   )
 }
@@ -265,7 +275,13 @@ function dragonWingGeo(): GeoFile {
     east: { uv: [u, v + d], uv_size: [d, d] },
     west: { uv: [u + d + w, v + d], uv_size: [d, d] },
   })
-  const skin = (v: number): Uv => ({ up: { uv: [0, v], uv_size: [56, 56] }, down: { uv: [56, v], uv_size: [56, 56] } })
+  // Java box UV for the membrane: the outer end is u=0 and the bone edge is the bottom of the 56x56 quad
+  // (v+56); the trailing edge (top) carries the scallops. Our up face runs v with +z (away from the bone),
+  // so it's flipped; the left wing is mirrored (Java draws it with scale -1,1,1).
+  const skin = (v: number, side: 1 | -1): Uv =>
+    side < 0
+      ? { up: { uv: [0, v + 56], uv_size: [56, -56] }, down: { uv: [56, v], uv_size: [56, 56] } }
+      : { up: { uv: [56, v + 56], uv_size: [-56, -56] }, down: { uv: [112, v], uv_size: [-56, 56] } }
   // side -1 = right wing (extends to -x), +1 = left (mirrored)
   const wing = (side: 1 | -1, name: string) => {
     const x0 = side * 1.5
@@ -278,7 +294,7 @@ function dragonWingGeo(): GeoFile {
         rotation: [-75, side * -25, side * -30],
         cubes: [
           { origin: [at(x0, L), 22.2, 1.7], size: [L, 1.6, 1.6], uv: box(112, 88, 56, 8) },
-          { origin: [at(x0, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(88) },
+          { origin: [at(x0, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(88, side) },
         ],
       },
       {
@@ -287,7 +303,7 @@ function dragonWingGeo(): GeoFile {
         pivot: [x0 + side * L, 23, 2.5],
         cubes: [
           { origin: [at(x0 + side * L, L), 22.6, 2.1], size: [L, 0.8, 0.8], uv: box(112, 136, 56, 4) },
-          { origin: [at(x0 + side * L, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(144) },
+          { origin: [at(x0 + side * L, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(144, side) },
         ],
       },
     ]
@@ -334,7 +350,8 @@ const CAPE_GEO: GeoFile = {
   'minecraft:geometry': [
     {
       description: { texture_width: 22, texture_height: 17 },
-      bones: [{ name: 'cape', pivot: [0, 0, 0], rotation: [0, 180, 0], cubes: [{ origin: [-5, 0, -1], size: [10, 16, 1], uv: [0, 0] }] }],
+      // The design is the box's north face (uv 1,1): it faces -z, towards the camera.
+      bones: [{ name: 'cape', pivot: [0, 0, 0], cubes: [{ origin: [-5, 0, -1], size: [10, 16, 1], uv: [0, 0] }] }],
     },
   ],
 }
@@ -344,7 +361,8 @@ const CAPE_ON_PLAYER: GeoFile = {
   'minecraft:geometry': [
     {
       description: { texture_width: 22, texture_height: 17 },
-      bones: [{ name: 'bipedBody', pivot: [0, 24, 0], rotation: [6, 180, 0], cubes: [{ origin: [-5, 8, 2.1], size: [10, 16, 1], uv: [0, 0] }] }],
+      // Player space: the back is -z, so the north face (the design) faces away from the back; tilted out at the bottom.
+      bones: [{ name: 'bipedBody', pivot: [0, 24, -2.4], rotation: [-6, 0, 0], cubes: [{ origin: [-5, 8, -3.4], size: [10, 16, 1], uv: [0, 0] }] }],
     },
   ],
 }
@@ -376,12 +394,15 @@ async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   const box = new Box3().setFromObject(parsedObj)
   const cy = (box.min.y + box.max.y) / 2
   const body = objPath.includes('/bodywear/')
+  const folder = objPath.split('/').slice(-2)[0]!
   const space = cy > 0.6 ? 'feet-up' : cy < (body ? -0.4 : -1) ? 'feet' : 'local'
   const obj = new Group()
   obj.add(parsedObj)
-  if (space !== 'feet-up') parsedObj.rotation.z = Math.PI
+  // The face mask is y-up too (its straps rise above the plate); flipped it was upside down.
+  if (space !== 'feet-up' && folder !== 'mask') parsedObj.rotation.z = Math.PI
   obj.userData.objSpace = space
   obj.userData.objBody = body
+  obj.userData.objFolder = folder
   obj.traverse((o) => {
     if ('material' in o) (o as unknown as { material: MeshLambertMaterial }).material = material
   })
