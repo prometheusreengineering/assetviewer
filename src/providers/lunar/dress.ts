@@ -89,6 +89,8 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
       // Flat bodywear is drawn at z=0 (inside the torso): move it onto the chest.
       if (body && flat) object.position.z = CHEST_FRONT - box.min.z
     }
+    // Legacy glasses put the lenses at 26.75-29 px, above most skins' eyes (rows 4-5 of the face).
+    if (entry.item.category === 'glasses') object.position.y -= 1 / 16
     scene.updateMatrixWorld(true)
     const part = body ? 'low_body' : 'head'
     socket(bone(part), object, part)
