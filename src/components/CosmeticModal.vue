@@ -1,22 +1,24 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import Menu from 'primevue/menu'
 import InputText from 'primevue/inputtext'
 import CollectionPicker from './CollectionPicker.vue'
 import Slider from 'primevue/slider'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
-import vTooltip from 'primevue/tooltip'
 import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue'
 import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download } from '../download'
+import { formatBytes } from '../format'
 import { zipFiles } from '../providers/lunar'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
 import { playerEmoteId, showOnPlayer, skinName } from '../skin'
 import AnimatedImage from './AnimatedImage.vue'
+import ControlsHelp from './ControlsHelp.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -53,7 +55,6 @@ let swapControls: ((free: boolean) => void) | undefined
 let raf = 0
 let token = 0
 const animState = inject<Ref<string> | undefined>('animState', undefined)
-const HELP = ['Rotate: drag', 'Move: Shift + drag (or right-drag)', 'Zoom: mouse wheel'].join(String.fromCharCode(10))
 const dimTick = ref(0)
 const infoRows = computed(() => (dimTick.value >= 0 && props.item ? Object.entries(props.provider.info?.(props.item) ?? {}) : []))
 const shown = shallowRef<CosmeticItem | null>(null)
@@ -111,6 +112,8 @@ async function open(item: CosmeticItem) {
       return
     }
     model = loaded
+    // ".webp, .obj, .json": the distinct extensions of the source files in the zip
+    zipExts.value = [...new Set(loaded.files.map((f) => '.' + (f.name.split('.').pop() ?? '').toLowerCase()))].join(', ')
     hasModel.value = true
     states.value = loaded.states
     timeline.value = loaded.timeline
@@ -218,6 +221,28 @@ function applySkin() {
 
 const slug = () => (shown.value?.name ?? 'item').toLowerCase().replace(/[^a-z0-9]+/g, '_')
 
+// Download menu: each option says what the file(s) contain. Shown as a dropdown when there is more than one.
+const downloadMenu = ref<InstanceType<typeof Menu>>()
+const zipExts = ref('')
+const downloadOptions = computed(() => {
+  if (hasModel.value) {
+    return [
+      { label: `ZIP (${zipExts.value})`, sub: 'original source files from the CDN', icon: 'pi pi-folder', command: downloadZip },
+      { label: 'GLB (.glb)', sub: 'auto-generated all-in-one 3D file', icon: 'pi pi-box', command: downloadGlb },
+    ]
+  }
+  if (imgSrc.value) {
+    const ext = (props.item?.fields.ext as string) || 'webp'
+    return [{ label: `${ext.toUpperCase()} (.${ext})`, sub: 'original source file from the CDN', icon: 'pi pi-image', command: () => downloadUrl(imgSrc.value, imageName()) }]
+  }
+  if (raw.value) {
+    const r = raw.value
+    const ext = r.name.includes('.') ? r.name.split('.').pop()! : ''
+    return [{ label: ext ? `${ext.toUpperCase()} (.${ext})` : `${r.name} (no extension)`, sub: 'original source file from the CDN', icon: 'pi pi-file', command: () => downloadUrl(r.url, r.name) }]
+  }
+  return []
+})
+
 function downloadZip() {
   download(`${slug()}.zip`, zipFiles(model!.files), 'application/zip')
 }
@@ -257,7 +282,8 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
     <div class="stage" :class="{ text: !!raw }">
       <div v-show="item?.render === '3d'" ref="canvasHost" class="canvas" />
       <AnimatedImage v-if="imgSrc" :src="imgSrc" v-bind="imgFrames" />
-      <pre v-if="raw" class="code">{{ raw.text ?? `Binary file, ${raw.size} bytes. Use the download button.` }}</pre>
+      <pre v-if="raw" class="code">{{ raw.text ?? `Binary file, ${formatBytes(raw.size)}. Use the download button.` }}</pre>
+      <ControlsHelp v-if="hasModel" />
       <i v-if="loading" class="pi pi-spin pi-spinner busy" />
       <p v-if="error" class="err">{{ error }}</p>
     </div>
@@ -266,10 +292,6 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         <label><ToggleSwitch v-model="wireframe" /> Wireframe</label>
         <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
-        <i
-          v-tooltip.top="{ value: HELP, class: 'help-tip' }"
-          class="pi pi-question-circle help"
-        />
         <Select v-if="states.length > 1" v-model="state" :options="states" size="small" placeholder="Animation" />
         <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
         <Select
@@ -291,12 +313,21 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           <span class="time">{{ tlTime.toFixed(1) }} / {{ timeline.duration.toFixed(1) }} s</span>
         </template>
         <InputText v-if="usesSkin" v-model="skinDraft" size="small" placeholder="Skin (Minecraft username)" class="skin" title="Loads the skin from mc-heads.net; empty = placeholder" @keyup.enter="applySkin" @blur="applySkin" />
-        <Button label="ZIP (source files)" icon="pi pi-download" size="small" @click="downloadZip" />
-        <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
       </template>
-      <Button v-if="imgSrc" label="Download image" icon="pi pi-download" size="small" @click="downloadUrl(imgSrc, imageName())" />
+      <Button v-if="downloadOptions.length" size="small" aria-haspopup="true" @click="downloadMenu?.toggle($event)">
+        <i class="pi pi-download" />
+        <span>Download</span>
+        <i class="pi pi-chevron-down chev" />
+      </Button>
+      <Menu ref="downloadMenu" :model="downloadOptions" popup class="dl-menu">
+        <template #item="{ item }">
+          <a class="dl-item">
+            <i :class="item.icon" />
+            <span class="dl-text"><span class="dl-label">{{ item.label }}</span><span class="dl-sub">{{ (item as { sub?: string }).sub }}</span></span>
+          </a>
+        </template>
+      </Menu>
       <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
-      <Button v-if="raw" label="Download file" icon="pi pi-download" size="small" @click="downloadUrl(raw.url, raw.name)" />
     </div>
     <dl v-if="infoRows.length" class="info">
       <div v-for="[k, v] in infoRows" :key="k" class="pair" :class="{ wide: v.length > 36 }">
@@ -318,16 +349,17 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
 .skin { width: 13rem; }
 .pose { width: 12rem; }
+.chev { font-size: 0.7rem; margin-left: 0.15rem; }
+.dl-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.9rem; cursor: pointer; }
+.dl-item:hover { background: var(--p-surface-800); }
+.dl-text { display: flex; flex-direction: column; }
+.dl-label { font-weight: 600; }
+.dl-sub { font-size: 0.8rem; opacity: 0.65; }
 .titlebar { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
-.help { cursor: help; opacity: 0.6; font-size: 1.1rem; }
-.help:hover { opacity: 1; }
 label { display: flex; align-items: center; gap: 0.5rem; }
 .info { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 2rem; margin: 0.75rem 0 0; font-size: 0.85rem; opacity: 0.8; }
 .pair { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0 0.75rem; min-width: 0; }
 .pair.wide { grid-column: 1 / -1; }
 .info dt { opacity: 0.6; }
 .info dd { margin: 0; word-break: break-all; }
-</style>
-<style>
-.help-tip { white-space: pre-line; }
 </style>

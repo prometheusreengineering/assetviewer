@@ -8,6 +8,7 @@ import { getFileBuffer } from '../cdn'
 import { download } from '../download'
 import type { CosmeticItem, CosmeticProvider } from '../providers/types'
 import CosmeticModal from './CosmeticModal.vue'
+import { formatBytes } from '../format'
 
 const props = defineProps<{ provider: CosmeticProvider }>()
 
@@ -19,7 +20,7 @@ const rows = computed(() => {
   return q ? all.value.filter((f) => f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)) : all.value
 })
 
-const fmt = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n > 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`)
+const fmt = formatBytes
 
 async function save(f: { path: string; hash: string }) {
   download(f.path.split('/').pop()!, await getFileBuffer(f.hash))

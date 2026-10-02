@@ -5,6 +5,7 @@ import ProgressBar from 'primevue/progressbar'
 import { zip, type AsyncZippable } from 'fflate'
 import { computed, ref } from 'vue'
 import { download } from '../download'
+import { formatBytes } from '../format'
 import type { CosmeticItem, CosmeticProvider } from '../providers/types'
 
 const props = defineProps<{ provider: CosmeticProvider; items: CosmeticItem[]; name: string }>()
@@ -17,7 +18,7 @@ const message = ref('')
 let cancelled = false
 
 const estimate = computed(() => (open.value ? props.items.reduce((s, it) => s + (props.provider.estimateSize?.(it) ?? 0), 0) : 0))
-const mb = (n: number) => `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB`
+const mb = formatBytes
 // Big exports get a confirmation first; small ones start right away.
 const big = computed(() => props.items.length > 300 || estimate.value > 100e6)
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'item'

@@ -9,6 +9,7 @@ import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } f
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { LUNAR_INDEXES } from '../../config'
 import { fetchImageSize } from '../../dimensions'
+import { formatBytes } from '../../format'
 import { dressPlayer } from './dress'
 import { emoteSources, loadEmote } from './emotes'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
@@ -576,7 +577,7 @@ export const lunarProvider: CosmeticProvider = {
       Animated: yn(f.animated),
       Special: yn(f.special),
       'File type': f.ext ? String(f.ext) : undefined,
-      'File size': typeof f.size === 'number' && f.size ? `${f.size.toLocaleString()} bytes` : undefined,
+      'File size': typeof f.size === 'number' && f.size ? formatBytes(f.size) : undefined,
       Dimensions: typeof f.width === 'number' && f.width ? `${f.width} × ${f.height} px` : undefined,
       Folder: f.folder ? String(f.folder) : undefined,
     }
