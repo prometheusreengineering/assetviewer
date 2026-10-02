@@ -26,10 +26,10 @@ export interface Scheme {
 const MAX_CAPACITY = 600
 const STEP = 1 / 30
 
-const num = (e: unknown, lib: FnLib, d = 0): Compiled =>
+export const num = (e: unknown, lib: FnLib, d = 0): Compiled =>
   typeof e === 'number' ? () => e : typeof e === 'string' && e.trim() !== '' ? compile(e, lib) : typeof e === 'boolean' ? () => (e ? 1 : 0) : () => d
 type Vec = (s: Scope) => number[]
-const vec = (e: unknown, lib: FnLib, n: number, d: number[]): Vec => {
+export const vec = (e: unknown, lib: FnLib, n: number, d: number[]): Vec => {
   if (!Array.isArray(e)) {
     const one = e === undefined ? undefined : num(e, lib)
     return one ? (s) => Array(n).fill(one(s)) : () => d
@@ -38,7 +38,7 @@ const vec = (e: unknown, lib: FnLib, n: number, d: number[]): Vec => {
   return (s) => cs.map((c) => c(s))
 }
 
-interface Curve {
+export interface Curve {
   name: string
   type: string
   nodes: number[]
@@ -46,7 +46,7 @@ interface Curve {
   range: Compiled
 }
 
-function curveValue(c: Curve, s: Scope): number {
+export function curveValue(c: Curve, s: Scope): number {
   const n = c.nodes
   if (!n.length) return 0
   const r = c.range(s) || 1
@@ -87,7 +87,7 @@ const _v = new Vector3()
 const _c = new Color()
 const rnd = () => Math.random()
 
-function hex(s: string): [number, number, number, number] {
+export function hex(s: string): [number, number, number, number] {
   const h = s.replace('#', '')
   const a = h.length === 8 ? parseInt(h.slice(0, 2), 16) / 255 : 1
   _c.set('#' + h.slice(-6))

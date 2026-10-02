@@ -89,7 +89,7 @@ export const humanize = (path: string) =>
     .replace(/[_-]+/g, ' ')
     .replace(/\b[a-z]/g, (c) => c.toUpperCase())
 
-const GEK_CATEGORY: Record<string, string> = {
+export const GEK_CATEGORY: Record<string, string> = {
   hats: 'hat',
   suits: 'suits',
   pets: 'pet',
@@ -104,7 +104,7 @@ const GEK_CATEGORY: Record<string, string> = {
 }
 
 /** Category for files outside the cosmetic catalog (badges, sprays, emotes, ...). */
-function resourceCategory(rel: string): string {
+export function resourceCategory(rel: string): string {
   if (rel.startsWith('badges/')) return 'badges'
   if (rel.startsWith('sprays/')) return 'sprays'
   if (rel.startsWith('emotes/icons/')) return 'emote_icons'

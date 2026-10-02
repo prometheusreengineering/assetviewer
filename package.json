@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --project unit",
+    "test:dom": "vitest run --project dom",
+    "test:browser": "vitest run --project browser"
   },
   "dependencies": {
     "@primeuix/themes": "^3.0.1",
@@ -22,9 +28,15 @@
     "@types/node": "^24.13.3",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/browser-playwright": "^5.0.3",
+    "@vitest/coverage-v8": "^5.0.3",
+    "@vue/test-utils": "^2.5.1",
     "@vue/tsconfig": "^0.9.1",
+    "happy-dom": "^20.14.5",
+    "playwright": "^1.63.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
+    "vitest": "^5.0.3",
     "vue-tsc": "^3.3.11"
   }
 }

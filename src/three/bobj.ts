@@ -18,7 +18,7 @@ export interface BobjMesh {
   weights: [string, number][][]
 }
 
-interface Kf {
+export interface Kf {
   t: number
   v: number
   interp: string
@@ -218,12 +218,12 @@ export function skinnedMesh(m: BobjMesh, skel: BobjSkeleton, material: Material)
   return mesh
 }
 
-function cubic(a: number, b: number, c: number, d: number, s: number) {
+export function cubic(a: number, b: number, c: number, d: number, s: number) {
   const u = 1 - s
   return u * u * u * a + 3 * u * u * s * b + 3 * u * s * s * c + s * s * s * d
 }
 
-function evalChannel(k: Kf[], t: number): number {
+export function evalChannel(k: Kf[], t: number): number {
   const first = k[0]!
   const last = k[k.length - 1]!
   if (t <= first.t) return first.v

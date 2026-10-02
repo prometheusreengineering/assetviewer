@@ -12,8 +12,17 @@ Unofficial fan viewer for Lunar Client cosmetics, served from `https://textures.
 ## Commands
 - `npm run dev` (vite; I use `npx vite --port 5199`), `npm run build` (= `vue-tsc -b && vite build`). The build always prints a >500 kB chunk warning (known, ignorable).
 - Type check alone: `npx vue-tsc -b` (silent = pass). `erasableSyntaxOnly` is on: no class parameter properties.
-- `node scripts/coverage.mjs` — classifies every CDN index file as item / dependency / resource and must print `UNCLAIMED 0` (exit 1 otherwise). Run it after touching `lunar/catalog.ts`.
+- `node scripts/coverage.mjs` — classifies every CDN index file as item / dependency / resource and must print `UNCLAIMED 0` (exit 1 otherwise). Run it after touching `lunar/catalog.ts`. The logic lives in `scripts/coverageLib.mjs` (`classify()`), shared with the live test.
 - `taskkill //F //IM node.exe` stops stray dev servers/CDP runs (Git Bash needs the double slashes).
+- Tests (Vitest 5, `vitest.config.ts`, three projects): `npm test` runs everything; `npm run test:unit|test:dom|test:browser` one project; `npm run test:coverage` writes `coverage/` (git-ignored); `npm run test:watch`. One-time setup: `npx playwright install chromium`. CI: `.github/workflows/test.yml` (type check + all tests + coverage) on push/PR to main.
+
+## Tests
+- **unit** (`tests/unit`, Node): pure logic, parsers, three.js geometry (no rendering), catalog/provider/emotes/dress on a fixture CDN. `tests/unit/live/*` hit the real Lunar CDN (network needed, ~1 min): catalog integrity, `UNCLAIMED 0`, a sample of models per category, every emote's action, every particle scheme, `functions.molang`.
+- **dom** (`tests/dom`, happy-dom): stateful modules (fresh import per test via `vi.resetModules`, they read localStorage on import), Vue components mounted with PrimeVue + a memory router (`tests/helpers/mount.ts`: `mountApp`, `settle`, `$`/`$$`/`byText`, `press` for PrimeVue's pointer events), and the whole app on the fixture CDN (`tests/dom/app.test.ts`). WebGL is faked with `vi.mock('three', …)` → `FakeWebGLRenderer` (`tests/helpers/webgl.ts`; it must not import `three`, or the mock factory deadlocks). `FakeIntersectionObserver.intersectAll()` makes cards visible.
+- **browser** (`tests/browser`, Chromium via Playwright): real WebGL pixel checks (`readPixels` right after a render; `SharedRenderer.frame` is called directly), Cache Storage, live models, the full app on the hash router.
+- Fixtures: `tests/fixtures/lunar.ts` is a mini CDN (every entry kind, unlisted files, resources, emotes, particles); `installCdn(LUNAR_FULL)` (`tests/helpers/cdnMock.ts`) serves it through a mocked `fetch` (both indexes + `/file/<hash>`, Range supported). `installBitmapStubs()` gives Node a `createImageBitmap` that reads sizes from image headers and a recording `OffscreenCanvas`. `installMemoryCaches()` is an in-memory Cache Storage (live tests).
+- Some private helpers are exported only for tests (`ownerOf`, `enrich`, `measurable`, `dragonWingGeo`, `faceRects`, `buildCube`, `curveValue`, `hex`, `evalChannel`, `grow`, `socket`, …). Pin a known bug with `it.fails` (it flips to a failure once fixed; then make it a plain `it`).
+- PrimeVue overlays teleport to `body`; the dom setup unmounts components (`enableAutoUnmount`) and then clears `body` after each test (afterEach hooks run last-registered first).
 
 ## Architecture
 - `src/cdn.ts`: `getIndexBuffer`, `getFileBuffer/Json/Text(hash)`, `fileUrl(hash)`. Everything on the CDN is content-hash addressed, so results are stored in Cache Storage forever (`assetviewer-cdn-v1`) with a retry/backoff fetch. **Always get bytes through this cache** (see CORS notes).

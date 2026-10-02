@@ -32,8 +32,8 @@ const HEAD_Y: Record<string, number> = { mask: 1.62, bandanna: 1.875, facebandan
  * cosmetics are modelled around the base 8/4 px parts, so the second layer poked through hats, suits and
  * glasses. Worn parts are scaled up around their part's center (rest pose, player space, blocks) to clear it.
  */
-const WORN_SCALE = 1.125
-const PART_CENTER: Record<string, [number, number, number]> = {
+export const WORN_SCALE = 1.125
+export const PART_CENTER: Record<string, [number, number, number]> = {
   head: [0, 28 / 16, 0],
   low_body: [0, 18 / 16, 0],
   right_arm: [-6 / 16, 18 / 16, 0],
@@ -41,7 +41,7 @@ const PART_CENTER: Record<string, [number, number, number]> = {
   right_leg: [-2 / 16, 6 / 16, 0],
   left_leg: [2 / 16, 6 / 16, 0],
 }
-function grow(part: string): Matrix4 {
+export function grow(part: string): Matrix4 {
   const c = PART_CENTER[part]
   if (!c) return new Matrix4()
   return new Matrix4().makeTranslation(...c).multiply(new Matrix4().makeScale(WORN_SCALE, WORN_SCALE, WORN_SCALE)).multiply(new Matrix4().makeTranslation(-c[0], -c[1], -c[2]))
@@ -56,7 +56,7 @@ const _b = new Vector3()
  * grown around the part (see WORN_SCALE). `parentWorld` is the parent's rest transform from before any
  * socketing, so nested biped bones aren't grown twice.
  */
-function socket(bone: Object3D, obj: Object3D, part?: string, parentWorld = obj.parent!.matrixWorld.clone()) {
+export function socket(bone: Object3D, obj: Object3D, part?: string, parentWorld = obj.parent!.matrixWorld.clone()) {
   const holder = new Group()
   holder.matrixAutoUpdate = false
   holder.matrix.copy(bone.matrixWorld).invert().multiply(part ? grow(part) : new Matrix4()).multiply(parentWorld)

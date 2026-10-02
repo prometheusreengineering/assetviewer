@@ -97,7 +97,8 @@ function bitmapOf(rel: string, hashOf: HashOf) {
 
 /** Plays an emote looping (or hold-and-restart) and exposes its timeline. */
 export function emoteTimeline(durationTicks: number, looping: boolean, apply: (tick: number) => void) {
-  let start = -1
+  // Unset until the first tick (a seek soon after page load can make it negative).
+  let start: number | undefined
   let last = 0
   let paused = false
   let current = 0
@@ -123,7 +124,7 @@ export function emoteTimeline(durationTicks: number, looping: boolean, apply: (t
   }
   const tick = (ms: number) => {
     last = ms
-    if (start < 0) start = ms
+    start ??= ms
     if (!paused) {
       const t = (ms - start) / TICK_MS
       current = looping ? t % durationTicks : Math.min(t % (durationTicks + HOLD_TICKS), durationTicks)
@@ -172,7 +173,10 @@ const schemes = new Map<string, Promise<Scheme | undefined>>()
 const loadScheme = (name: string, hashOf: HashOf) => {
   let p = schemes.get(name)
   if (!p) {
-    p = getFileJson<Scheme>(hashOf(`particles/schemes/${name}.particle.json`)).catch(() => undefined)
+    // hashOf throws for a scheme missing from the CDN; inside the promise so the emote loads without it.
+    p = Promise.resolve()
+      .then(() => getFileJson<Scheme>(hashOf(`particles/schemes/${name}.particle.json`)))
+      .catch(() => undefined)
     schemes.set(name, p)
   }
   return p

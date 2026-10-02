@@ -18,7 +18,7 @@ interface FaceUv {
   uv: [number, number]
   uv_size?: [number, number]
 }
-interface GeoCube {
+export interface GeoCube {
   origin: [number, number, number]
   size: [number, number, number]
   inflate?: number
@@ -27,7 +27,7 @@ interface GeoCube {
   mirror?: boolean
   uv?: [number, number] | Partial<Record<'north' | 'south' | 'east' | 'west' | 'up' | 'down', FaceUv>>
 }
-interface GeoBone {
+export interface GeoBone {
   name: string
   parent?: string
   pivot?: [number, number, number]
@@ -84,7 +84,7 @@ export function createMaterial(map: Texture) {
   return m
 }
 
-function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
+export function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
   const [w, h, d] = cube.size.map((n) => Math.floor(Math.abs(n))) as [number, number, number]
   const rects = {} as Record<Face, [number, number, number, number]>
   if (Array.isArray(cube.uv)) {
@@ -112,7 +112,7 @@ function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]
 }
 
 // Coplanar faces from overlapping cubes z-fight; a tiny per-cube growth breaks the tie deterministically.
-function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number, flipU: boolean): Mesh {
+export function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number, flipU: boolean): Mesh {
   const inf = (cube.inflate ?? 0) + (index % 40) * 0.008
   // Some models mirror a cube by giving it negative sizes (paired with a plain copy for two-sided faces); a
   // negative BoxGeometry would put every face texture on the opposite side, leaving sides see-through.

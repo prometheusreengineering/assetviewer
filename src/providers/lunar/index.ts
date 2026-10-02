@@ -14,7 +14,7 @@ import { dressPlayer } from './dress'
 import { emoteSources, loadEmote } from './emotes'
 import { humanize, loadLunarCatalog, PREFIX, RESOURCE_CATEGORIES, type LunarCatalog, type LunarEntry } from './catalog'
 
-const COSMETIC_LABELS: Record<string, [string, string]> = {
+export const COSMETIC_LABELS: Record<string, [string, string]> = {
   hat: ['Hats', 'pi-crown'],
   mask: ['Masks', 'pi-face-smile'],
   bandanna: ['Bandannas', 'pi-flag'],
@@ -39,7 +39,7 @@ const COSMETIC_LABELS: Record<string, [string, string]> = {
   emotes: ['Emotes', 'pi-video'],
 }
 
-const RESOURCE_LABELS: Record<string, [string, string]> = {
+export const RESOURCE_LABELS: Record<string, [string, string]> = {
   badges: ['Badges', 'pi-verified'],
   sprays: ['Sprays', 'pi-palette'],
   emote_icons: ['Emote icons', 'pi-image'],
@@ -61,7 +61,7 @@ export const OUTFIT = 'outfit'
 
 let owners: Map<string, LunarEntry> | undefined
 /** The catalog entry a file belongs to: the file itself, or a sibling sharing its folder and stem (geo, anim, texture, mcmeta). */
-function ownerOf(path: string): LunarEntry | undefined {
+export function ownerOf(path: string): LunarEntry | undefined {
   if (!owners) {
     owners = new Map()
     const key = (p: string) => p.replace(/\/(textures|thumbnail)\//, '/').replace(/\.(mcmeta|gek\.json|geo\.json|anim\.json|webp|png|gif|jpe?g)/g, '')
@@ -265,7 +265,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
 // bone at uv 112,88 with a 56x56 membrane at -56,88, then a wing tip (bone 112,136, membrane -56,144).
 // Built at WING_S scale on the upper back, Bedrock convention (back = +z, the player's right = -x).
 const WING_S = 0.2
-function dragonWingGeo(): GeoFile {
+export function dragonWingGeo(): GeoFile {
   const L = 56 * WING_S
   type Uv = Record<string, { uv: [number, number]; uv_size: [number, number] }>
   const box = (u: number, v: number, w: number, d: number): Uv => ({
@@ -347,7 +347,7 @@ async function loadWing2d(entry: LunarEntry, raw = false): Promise<LoadedModel> 
 }
 
 // Lunar cloaks use the OptiFine layout: a 22x17 base grid (scaled by any integer), cape box 10x16x1 at uv 0,0.
-const CAPE_GEO: GeoFile = {
+export const CAPE_GEO: GeoFile = {
   'minecraft:geometry': [
     {
       description: { texture_width: 22, texture_height: 17 },
@@ -358,7 +358,7 @@ const CAPE_GEO: GeoFile = {
 }
 
 // The same cape hung from the shoulders behind a player (bone named so it follows the torso).
-const CAPE_ON_PLAYER: GeoFile = {
+export const CAPE_ON_PLAYER: GeoFile = {
   'minecraft:geometry': [
     {
       description: { texture_width: 22, texture_height: 17 },
@@ -438,10 +438,10 @@ function blobUrl(path: string): Promise<string> {
 }
 
 /** Entries whose main file is an image whose header can be read for width/height. */
-const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'file' && e.kind !== 'emote' && /\.(webp|png|gif)$/i.test(e.path)
+export const measurable = (e?: LunarEntry) => !!e && e.kind !== 'gek' && e.kind !== 'file' && e.kind !== 'emote' && /\.(webp|png|gif)$/i.test(e.path)
 
 /** Fills the catalog-wide fields (id, size, path, folder, ...) used by the filter and sort bar. */
-function enrich(c: LunarCatalog) {
+export function enrich(c: LunarCatalog) {
   for (const e of c.entries) {
     const f = e.item.fields
     const cat = e.item.category
@@ -606,7 +606,11 @@ export const lunarProvider: CosmeticProvider = {
       const refs: string[] = []
       const walk = (v: unknown) => {
         if (typeof v === 'string' && v.startsWith('lunar:')) refs.push(v)
-        else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x)
+        else if (v && typeof v === 'object') {
+          // A `model` map has the geometry paths as keys (values are conditions).
+          if (!Array.isArray(v)) for (const k of Object.keys(v)) if (k.startsWith('lunar:')) refs.push(k)
+          for (const x of Object.values(v)) walk(x)
+        }
       }
       walk(await getFileJson(hashOf(e.path)))
       for (const r of refs) await add(r)
