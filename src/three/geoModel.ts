@@ -64,7 +64,7 @@ export function createMaterial(map: Texture) {
 }
 
 function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]> {
-  const [w, h, d] = cube.size.map(Math.floor) as [number, number, number]
+  const [w, h, d] = cube.size.map((n) => Math.floor(Math.abs(n))) as [number, number, number]
   const rects = {} as Record<Face, [number, number, number, number]>
   if (Array.isArray(cube.uv)) {
     const [u, v] = cube.uv
@@ -93,7 +93,9 @@ function faceRects(cube: GeoCube): Record<Face, [number, number, number, number]
 // Coplanar faces from overlapping cubes z-fight; a tiny per-cube growth breaks the tie deterministically.
 function buildCube(cube: GeoCube, texW: number, texH: number, material: MeshLambertMaterial, index: number): Mesh {
   const inf = (cube.inflate ?? 0) + (index % 40) * 0.008
-  const geo = new BoxGeometry(cube.size[0] + inf * 2, cube.size[1] + inf * 2, cube.size[2] + inf * 2)
+  // Some models mirror a cube by giving it negative sizes (paired with a plain copy for two-sided faces); a
+  // negative BoxGeometry would put every face texture on the opposite side, leaving sides see-through.
+  const geo = new BoxGeometry(Math.abs(cube.size[0]) + inf * 2, Math.abs(cube.size[1]) + inf * 2, Math.abs(cube.size[2]) + inf * 2)
   const rects = faceRects(cube)
   const uvs: number[] = []
   const faces = geo.getIndex()!

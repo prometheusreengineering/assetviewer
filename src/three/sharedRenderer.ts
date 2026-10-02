@@ -129,10 +129,16 @@ export class SharedRenderer {
     r.render(this.grayScene, this.grayCam)
   }
 
+  private spin = 0
+  private lastMs = 0
+
   private frame = (ms: number) => {
     this.raf = requestAnimationFrame(this.frame)
     if (!this.container || !this.cssW || !this.cssH) return
 
+    // Accumulated, so re-enabling continues from where the spin stopped.
+    if (autoRotate.value) this.spin += Math.min(100, ms - (this.lastMs || ms)) * 0.0008
+    this.lastMs = ms
     const canvasRect = this.renderer.domElement.getBoundingClientRect()
     const r = this.renderer
     r.setScissorTest(false)
@@ -149,7 +155,7 @@ export class SharedRenderer {
       r.setScissor(x, y, rect.width, rect.height)
       this.camera.aspect = rect.width / rect.height
       this.camera.updateProjectionMatrix()
-      if (autoRotate.value) obj.rotation.y = ms * 0.0008
+      obj.rotation.y = this.spin
       slot.tick?.(ms)
       this.scene.add(obj)
       if (slot.gray) this.renderGray(r, rect.width, rect.height)

@@ -280,6 +280,8 @@ const menuModel = computed(() => {
     })
   }
   const model = [...groups].map(([label, items]) => ({ label, items }))
+  const tools = model.findIndex((g) => g.label === 'Tools')
+  const toolsGroup = tools < 0 ? undefined : model.splice(tools, 1)[0]
   if (provider.value.available) {
     const lists: { label: string; icon: string; class: string; command: () => void }[] = collections.value.all().map((c) => ({
       label: `${c.name} (${c.items.length})`,
@@ -288,10 +290,9 @@ const menuModel = computed(() => {
       command: () => void router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`),
     }))
     lists.push({ label: 'New collection', icon: 'pi pi-plus', class: '', command: newCollection })
-    // Right after "All files" and Tools.
-    const at = model.findIndex((g) => g.label.startsWith('Cosmetics'))
-    model.splice(at < 0 ? model.length : at, 0, { label: 'Collections', items: lists })
+    model.push({ label: 'Collections', items: lists })
   }
+  if (toolsGroup) model.push(toolsGroup)
   return model
 })
 </script>
@@ -331,12 +332,12 @@ const menuModel = computed(() => {
         <SelectButton v-model="view" :options="VIEWS" option-value="value" option-label="title" :allow-empty="false" size="small" aria-label="View">
           <template #option="{ option }"><i :class="option.icon" :title="option.title" /></template>
         </SelectButton>
-        <label v-if="view === 'grid'" class="zoom" title="Cards per row"><i class="pi pi-search-minus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-plus" /></label>
+        <label v-if="view === 'grid'" class="zoom" title="Cards per row"><i class="pi pi-search-plus" /><Slider v-model="cols" :min="2" :max="12" class="slider" /><i class="pi pi-search-minus" /></label>
         <label v-if="view === 'grid'" class="zoom" title="Rotate the 3D thumbnails (also applies to the modal, compare and outfit builder)"><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         </FilterBar>
       </div>
       <Message v-if="allItems.length > LAG_LIMIT" severity="warn" :closable="false" class="lag" icon="pi pi-exclamation-triangle">
-        This category has {{ allItems.length.toLocaleString() }} items, so the page may be laggy.
+        This category has {{ allItems.length.toLocaleString() }} items, so you may notice subpar performance.
       </Message>
       <CosmeticGrid
         :key="provider.id + category"
