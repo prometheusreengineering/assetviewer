@@ -32,7 +32,11 @@ npm run build   # type check + production build in dist/
 ```
 
 The build reads a `PRIMEUI_LICENSE` key from a `.env` file in the project root (never commit it).
-`worker/` holds an optional Cloudflare Worker that proxies the CDN; point the app at it with `VITE_CDN_BASE`.
+
+### Deployment
+
+Hosted on Cloudflare Pages at [assetviewer.dreamys.studio](https://assetviewer.dreamys.studio), built from `main` through the Git integration
+(build command `npm run build`, output directory `dist`, `PRIMEUI_LICENSE` set as a secret in the Pages project).
 
 ## Disclaimer
 

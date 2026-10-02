@@ -1,5 +1,5 @@
-// Base URL of the asset CDN. Point VITE_CDN_BASE at the Cloudflare Worker proxy in production.
-export const CDN_BASE: string = import.meta.env.VITE_CDN_BASE ?? 'https://textures.lunarclientcdn.com'
+// Base URL of the asset CDN (CORS *, so the browser fetches it directly).
+export const CDN_BASE = 'https://textures.lunarclientcdn.com'
 
 // Root indexes of the Lunar Client CDN (text files: `path sha1 size mtime` per line).
 export const LUNAR_INDEXES: string[] = [
