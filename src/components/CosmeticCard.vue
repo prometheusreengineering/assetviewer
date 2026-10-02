@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 .cmp { position: absolute; top: 0.4rem; left: 0.4rem; border: 0; background: color-mix(in srgb, var(--p-surface-950) 70%, transparent); color: var(--p-surface-300); border-radius: 50%; width: 1.9rem; height: 1.9rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
 .cmp.on { color: var(--p-primary-color); }
 .card:hover .cmp, .cmp.on { opacity: 1; }
-.view { position: relative; aspect-ratio: 1; display: grid; place-items: center; }
+.view { position: relative; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; }
 .view .pi-exclamation-triangle { opacity: 0.4; }
 .filetile { display: grid; place-items: center; gap: 0.25rem; opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; }
 .filetile .pi { font-size: 2.5rem; }

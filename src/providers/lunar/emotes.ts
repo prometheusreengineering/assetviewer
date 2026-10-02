@@ -1,6 +1,10 @@
 import { getFileBuffer, getFileJson, getFileText } from '../../cdn'
 import { actionNames, extractAction, parseBobj, type BobjAction, type BobjFile, type BobjMesh } from '../../three/bobj'
 import { fitObject } from '../../three/fit'
+import { createTexture } from '../../three/geoModel'
+import { Emitter, type Scheme } from '../../three/particles'
+import type { FnLib } from '../../three/animation/molang'
+import { Euler, Group, Matrix4, Quaternion, Vector3, type Texture } from 'three'
 import { createPlayer, type Player } from '../../three/player'
 import { skinBitmap } from '../../skin'
 import type { DownloadFile, LoadedModel, Timeline } from '../types'
@@ -152,6 +156,114 @@ export async function emoteSources(em: EmoteDef, data: EmotesJson, hashOf: HashO
   return { found, files, props }
 }
 
+interface MorphEntry {
+  morph: string
+  bone?: string
+  start?: number
+  length?: number
+  translate?: number[]
+  rotation?: number[]
+  scale?: number[]
+}
+
+const NO_LIB: FnLib = new Map()
+let particleCfg: Promise<Record<string, { morphs?: MorphEntry[] }>> | undefined
+const schemes = new Map<string, Promise<Scheme | undefined>>()
+const loadScheme = (name: string, hashOf: HashOf) => {
+  let p = schemes.get(name)
+  if (!p) {
+    p = getFileJson<Scheme>(hashOf(`particles/schemes/${name}.particle.json`)).catch(() => undefined)
+    schemes.set(name, p)
+  }
+  return p
+}
+
+/** Textures of the vanilla particle atlas (and blocks/items) aren't on the CDN: the atlas has a Lunar copy, the rest is a plain tint. */
+async function particleTexture(ref: string, hashOf: HashOf): Promise<Texture | undefined> {
+  const rel = ref.startsWith('lunar:') ? strip(ref) : ref === 'textures/particle/particles' ? 'particles/textures/default_particles.webp' : ''
+  try {
+    return createTexture(rel ? await bitmapOf(rel, hashOf) : await solidBitmap())
+  } catch {
+    return undefined
+  }
+}
+const solidBitmap = () => {
+  const c = new OffscreenCanvas(4, 4)
+  const g = c.getContext('2d')!
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, 4, 4)
+  return createImageBitmap(c)
+}
+
+export interface Effects {
+  object: Group
+  /** Advance to the emote's `tick` (ticks, 20/s); jumps and loops reset the particles. */
+  update(tick: number): void
+  dispose(): void
+}
+
+/** Particle effects of an emote: its `morph` entries from particles/configuration.json (scheme + bone + start/length), or `particleEffect`. */
+export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player, durationTicks: number): Promise<Effects | undefined> {
+  const entries: { scheme: string; bone: string; start: number; end: number; local: Matrix4 }[] = []
+  const toLocal = (m: MorphEntry) => {
+    const t = m.translate ?? [0, 0, 0]
+    const r = m.rotation ?? [0, 0, 0]
+    const sc = m.scale ?? [1, 1, 1]
+    const q = new Quaternion().setFromEuler(new Euler((r[0]! * Math.PI) / 180, (r[1]! * Math.PI) / 180, (r[2]! * Math.PI) / 180, 'ZYX'))
+    return new Matrix4().compose(new Vector3(t[0], t[1], t[2]), q, new Vector3(sc[0], sc[1], sc[2]))
+  }
+  try {
+    if (em.morph) {
+      particleCfg ??= getFileJson(hashOf('particles/configuration.json'))
+      for (const m of (await particleCfg)[em.morph]?.morphs ?? []) {
+        const scheme = /Scheme:"([^"]+)"/.exec(m.morph)?.[1]
+        if (!scheme) continue
+        entries.push({ scheme, bone: m.bone ?? 'anchor', start: m.start ?? 0, end: (m.start ?? 0) + (m.length ?? durationTicks), local: toLocal(m) })
+      }
+    }
+    if (em.particleEffect) entries.push({ scheme: em.particleEffect, bone: '', start: 0, end: durationTicks, local: new Matrix4() })
+  } catch (e) {
+    console.warn('particle config', e)
+  }
+  if (!entries.length) return undefined
+  const object = new Group()
+  const inv = new Matrix4()
+  const emitters: { e: Emitter; start: number; end: number }[] = []
+  for (const en of entries) {
+    const scheme = await loadScheme(en.scheme, hashOf)
+    if (!scheme) continue
+    const render = scheme.particle_effect.description.basic_render_parameters
+    const boneName = en.bone || render.bone || 'anchor'
+    const bone = player.skel.bones.get(boneName)
+    if (!bone) continue
+    const tex = await particleTexture(render.texture, hashOf)
+    const out = new Matrix4()
+    // Emitter transform in the player's own space (the particle group is a child of player.object).
+    const e = new Emitter(scheme, NO_LIB, tex, () => {
+      inv.copy(player.object.matrixWorld).invert()
+      return out.copy(inv).multiply(bone.matrixWorld).multiply(en.local)
+    })
+    object.add(e.object)
+    emitters.push({ e, start: en.start, end: en.end })
+  }
+  if (!emitters.length) return undefined
+  let last = -1
+  return {
+    object,
+    update(tick) {
+      const dt = (tick - last) / 20
+      if (last < 0 || dt < 0 || dt > 0.5) for (const x of emitters) x.e.reset()
+      const step = last < 0 || dt < 0 || dt > 0.5 ? 0 : dt
+      last = tick
+      for (const x of emitters) {
+        x.e.setEnabled(tick >= x.start && tick < x.end)
+        x.e.step(step)
+      }
+    },
+    dispose: () => emitters.forEach((x) => x.e.dispose()),
+  }
+}
+
 export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf): Promise<LoadedModel> {
   const [player, { found, files, props: parts }] = await Promise.all([newPlayer(hashOf), emoteSources(em, data, hashOf)])
   const props: { mesh: { visible: boolean }; showAt: number }[] = []
@@ -161,9 +273,15 @@ export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf):
   }
   const action = found?.action
   const duration = Math.max(em.duration, action?.length ?? 0) || 1
+  const effects = await emoteEffects(em, hashOf, player, duration)
+  if (effects) player.object.add(effects.object)
   const apply = (tick: number) => {
     player.pose(action, tick)
     for (const p of props) p.mesh.visible = tick >= p.showAt
+    if (effects) {
+      player.object.updateMatrixWorld(true)
+      effects.update(tick)
+    }
   }
   apply(0)
   // The player faces +z; the camera looks from -z.
@@ -179,6 +297,9 @@ export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf):
     setState() {},
     timeline,
     tick,
-    dispose: () => player.dispose(),
+    dispose() {
+      effects?.dispose()
+      player.dispose()
+    },
   }
 }

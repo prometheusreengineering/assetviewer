@@ -53,6 +53,8 @@ const RESOURCE_LABELS: Record<string, [string, string]> = {
 }
 
 export const ALL_FILES = 'all-files'
+// Fully covered by the Emotes category (icons, props, body, actions); still listed under All files.
+const HIDDEN_CATEGORIES = new Set(['emote_icons', 'emote_textures', 'emote_data'])
 export const OUTFIT = 'outfit'
 
 let owners: Map<string, LunarEntry> | undefined
@@ -375,7 +377,7 @@ export const lunarProvider: CosmeticProvider = {
       group: 'Cosmetics (3D)',
     }))
     for (const id of RESOURCE_CATEGORIES) {
-      if (!counts.has(id)) continue
+      if (!counts.has(id) || HIDDEN_CATEGORIES.has(id)) continue
       defs.push({ id, count: counts.get(id)!, label: RESOURCE_LABELS[id]![0], icon: RESOURCE_LABELS[id]![1], group: 'Resources (2D)' })
     }
     defs.unshift({ id: OUTFIT, count: counts.get('emotes') ?? 0, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })

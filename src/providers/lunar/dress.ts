@@ -2,7 +2,7 @@ import { Box3, Group, Vector3, type Object3D } from 'three'
 import type { Player } from '../../three/player'
 import type { DownloadFile, LoadedModel } from '../types'
 import type { EmoteDef, EmotesJson, LunarEntry } from './catalog'
-import { emoteTimeline, findAction, newPlayer } from './emotes'
+import { emoteEffects, emoteTimeline, findAction, newPlayer } from './emotes'
 
 type HashOf = (rel: string) => string
 
@@ -92,7 +92,18 @@ export async function dressPlayer(
   scene.position.y = -0.78
   scene.rotation.y = Math.PI
   const action = found?.action
-  const anim = emote ? emoteTimeline(Math.max(emote.duration, action?.length ?? 0) || 1, !!emote.looping, (t) => player.pose(action, t)) : undefined
+  const ticks = emote ? Math.max(emote.duration, action?.length ?? 0) || 1 : 0
+  const effects = emote ? await emoteEffects(emote, hashOf, player, ticks) : undefined
+  if (effects) player.object.add(effects.object)
+  const anim = emote
+    ? emoteTimeline(ticks, !!emote.looping, (t) => {
+        player.pose(action, t)
+        if (effects) {
+          player.object.updateMatrixWorld(true)
+          effects.update(t)
+        }
+      })
+    : undefined
   const loaded = models.filter((m): m is LoadedModel => !!m)
   const single = loaded.length === 1 ? loaded[0] : undefined
   const files: DownloadFile[] = loaded.flatMap((m) => m.files)
@@ -113,6 +124,7 @@ export async function dressPlayer(
     },
     dispose() {
       for (const m of loaded) m.dispose()
+      effects?.dispose()
       player.dispose()
     },
   }

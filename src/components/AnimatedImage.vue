@@ -48,8 +48,9 @@ const sheet = computed(() => {
 </template>
 
 <style scoped>
-.fit { position: absolute; inset: 0; display: grid; place-items: center; }
-img { width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain; }
+/* The box clips; the image is pinned to it (a percentage height inside an auto-sized grid row made tall images overflow). */
+.fit { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; }
+img { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain; }
 .sheet { image-rendering: pixelated; background-repeat: no-repeat; max-width: 100%; max-height: 100%; }
 </style>
 <style>
