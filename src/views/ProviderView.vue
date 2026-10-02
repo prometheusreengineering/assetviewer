@@ -229,7 +229,7 @@ const menuModel = computed(() => {
   if (provider.value.available) {
     const lists: { label: string; icon: string; class: string; command: () => void }[] = collections.value.all().map((c) => ({
       label: `${c.name} (${c.items.length})`,
-      icon: c.id === FAV ? 'pi pi-star-fill' : 'pi pi-list',
+      icon: 'pi pi-bookmark',
       class: props.category === COLLECTION_PREFIX + c.id ? 'cat-active' : '',
       command: () => void router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`),
     }))

@@ -4,7 +4,7 @@ Unofficial fan viewer for Lunar Client cosmetics, served from `https://textures.
 
 ## Rules
 - **`.env` holds `PRIMEUI_LICENSE`.** It must stay git-ignored. Never print, echo or commit it. (It ends up in the built JS; unavoidable for a client app.)
-- Commit trailer: `Co-Authored-By: Claude <model> <noreply@anthropic.com>` naming the model actually in use (e.g. `Claude Opus 5.5`). PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- Commit trailer: `Co-Authored-By: Claude <model> <noreply@anthropic.com>` naming the model actually in use (e.g. `Claude Opus 5.5`); follow the attribution reminder in the session if one is given. PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Only commit/push when asked. The user typically says "commit and push"; commit locally and offer to push otherwise.
 - Pronouns: they/them unless stated.
 - Shell is Windows (Git Bash/PowerShell). Use Unix syntax in Bash. Don't run `sleep` chains in the foreground.
@@ -25,8 +25,8 @@ Unofficial fan viewer for Lunar Client cosmetics, served from `https://textures.
 - `src/three/`: `geoModel.ts` (Bedrock geo → three groups with bones, per-cube epsilon inflate + polygonOffset to stop z-fighting), `animation/molang.ts` (small Molang interpreter incl. `lunar.*` from `cosmetics/functions.molang`; unknown identifiers evaluate to 0), `animation/bedrockAnim.ts` (keyframes may be `[..]`, `{pre,post}` or `{vector}`; states seen: idle/moving/elytra/gui/walk/main; AnimationPlayer; states idle/moving/elytra/gui), `sharedRenderer.ts` (ONE WebGL canvas with per-card scissor viewports; camera near/far 1–12 for depth precision), `fit.ts`.
 - `src/filtering.ts` (pure): `Rule`/`SortKey`, `applyView(items, search, rules, sorts, fieldDefs)`; missing values sort last; `encodeRules/decodeRules` (base64url tuples) and `encodeSorts/decodeSorts` for URLs. UI is `components/FilterBar.vue` (PrimeVue Popovers).
 - Deep links: the grid mirrors `?q=&f=&s=&item=&cmp=` (ProviderView/CosmeticGrid use `router.replace`); the outfit page uses `?o=cat:id,...&e=emoteId`. Tool pages (`all-files`, `outfit`) don't get q/f/s.
-- `src/collections.ts`: named lists per provider (`assetviewer.collections.<provider>`, built-in `fav`), routes `/#/lunar/col-<id>` (mixed categories, union of fields). `src/compare.ts` + `CompareDialog.vue` (one renderer, scissored panes, one shared TrackballControls camera). `ExportButton.vue` (fflate async `zip`, images stored). `OutfitBuilder.vue` + `three/viewer.ts` (single-canvas viewer).
-- `src/views/ProviderView.vue` (sidebar + toolbar + grid, All files = `FileBrowser.vue`), `CosmeticModal.vue` (TrackballControls: drag rotates freely, Shift+drag or right-drag pans, wheel zooms; help tooltip; two-column field list; downloads), `CosmeticCard.vue`/`CosmeticGrid.vue`, `App.vue` (footer with stats from `src/stats.ts`).
+- `src/collections.ts`: named lists per provider (`assetviewer.collections.<provider>`, built-in `fav`), routes `/#/lunar/col-<id>` (mixed categories, union of fields). UI is `components/CollectionPicker.vue`: a bookmark button + count (always `pi-bookmark`, `0` when none; no star icons) opening a Popover with search, checkboxes, saved lists first. It lives on card hover and before the modal title. `src/compare.ts` + `CompareDialog.vue` (one renderer, scissored panes, one shared TrackballControls camera). `ExportButton.vue` (fflate async `zip`, images stored). `OutfitBuilder.vue` + `three/viewer.ts` (single-canvas viewer).
+- `src/views/ProviderView.vue` (sidebar + toolbar + grid, All files = `FileBrowser.vue`), `CosmeticModal.vue` (TrackballControls: drag rotates freely, Shift+drag or right-drag pans, wheel zooms; the "Free rotate" switch swaps in OrbitControls (upright, polar-clamped) live; help tooltip; two-column field list; downloads), `CosmeticCard.vue`/`CosmeticGrid.vue`, `App.vue` (footer with stats from `src/stats.ts`).
 - `worker/`: optional Cloudflare Worker proxy; deploy is the user's step (`VITE_CDN_BASE` points the app at it).
 
 ## Gotchas learned the hard way
@@ -39,6 +39,7 @@ Unofficial fan viewer for Lunar Client cosmetics, served from `https://textures.
 - **Windows encoding**: the Write/Edit tools or a Python rewrite once left `src/App.vue` non-UTF-8 and Vite failed with "stream did not contain valid UTF-8". When doing Python rewrites use `open(p, encoding='utf-8')` and `newline=''`. To find a bad file: loop `iconv -f utf-8 -t utf-8` over `src`. Git's LF→CRLF warnings are harmless.
 - Heredocs containing lots of quotes/backticks can break in Bash; use the Write tool for big files.
 - Route ids are category ids, not labels (wings = `dragon_wings`, cloaks = `cloak`, auras = `auras`, hats = `hat`, pets = `pet`, `emotes`, `outfit`, `col-fav`, `all-files`, etc.); an unknown id shows 0 items. `/#/lunar/<id>`.
+- **Picker row order**: `CollectionPicker` fixes the row order *before* opening the popover; computing it in an after-show handler made rows visibly jump. Don't use a PrimeVue MultiSelect with custom `#value`/`#dropdownicon` slots as the trigger: it produced doubled/mixed icons.
 - **Facing**: gek models, OBJs and the emote player all face **+z**; cameras sit at -z, so the plain modal shows a cosmetic's back. Player views (emotes, dressed player, outfit) rotate by π to show the face.
 - **OBJ hats are Java model space (y-down)**: `loadObj` turns them upright (rotation.z = π). Before that fix they rendered upside down.
 - **three.js objects in Vue state** must stay out of deep reactivity: use `shallowRef` and replace whole arrays (CompareDialog panes), or keep them in plain `let`s.
@@ -57,5 +58,5 @@ The wait expression must be an async IIFE `(async()=>{...; return true})()`; a b
 - Match surrounding style: no semicolons, single quotes, 2-space indent, short comments explaining *why*.
 - New fields for filtering: add to `CosmeticItem.fields` (catalog or `enrich()`), then expose in `lunarProvider.fields()` and, if user-visible, in `info()`.
 - Persisted UI prefs use `localStorage` inside try/catch (`assetviewer.cols`, `assetviewer.sort.<provider>.<category>`).
-- Unpushed work stays committed locally; the user asks for pushes explicitly.
+- Unpushed work stays committed locally; the user asks for pushes explicitly (often as "commit and push it" after reviewing a change). Offer to commit when a change is done and tested.
 - Known leftovers: main chunk ~1.5 MB; `moving`/`elytra` animations run with zero-speed inputs; Worker deploy is manual; emote `morph` (face expressions), `particleEffect` and slim arms aren't rendered; OBJ placement on the player is heuristic; 9 newest emotes have no icon (name tile).

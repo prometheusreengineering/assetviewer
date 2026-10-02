@@ -2,7 +2,7 @@
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
-import MultiSelect from 'primevue/multiselect'
+import CollectionPicker from './CollectionPicker.vue'
 import Slider from 'primevue/slider'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
@@ -16,7 +16,6 @@ import { download } from '../download'
 import { zipFiles } from '../providers/lunar'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
 import { playerEmoteId, showOnPlayer, skinName } from '../skin'
-import { FAV, useCollections } from '../collections'
 import AnimatedImage from './AnimatedImage.vue'
 
 const props = defineProps<{ provider: CosmeticProvider; item: CosmeticItem | null }>()
@@ -193,22 +192,6 @@ watch(freeRotate, (f) => swapControls?.(f))
 watch([showOnPlayer, playerEmoteId], () => canDress.value && shown.value && open(shown.value))
 onBeforeUnmount(teardown)
 
-const collections = useCollections(props.provider.id)
-const fav = computed(() => !!shown.value && collections.has(FAV, shown.value.id))
-const listOptions = computed(() => collections.all().map((c) => ({ label: c.name, value: c.id })))
-const inLists = computed(() => (shown.value ? collections.of(shown.value.id) : []))
-function setLists(ids: string[]) {
-  const it = shown.value
-  if (!it) return
-  for (const c of collections.all()) collections.set(c.id, it.id, ids.includes(c.id))
-}
-function addToNewList() {
-  const it = shown.value
-  const name = it && prompt('Name of the new collection')
-  if (!it || !name) return
-  collections.set(collections.create(name).id, it.id, true)
-}
-
 const copied = ref(false)
 async function copyLink() {
   await navigator.clipboard.writeText(location.href)
@@ -262,10 +245,15 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
     :visible="!!item"
     modal
     dismissable-mask
-    :header="item?.name"
     :style="{ width: 'min(900px, 95vw)' }"
     @update:visible="(v: boolean) => !v && emit('close')"
   >
+    <template #header>
+      <div class="titlebar">
+        <CollectionPicker v-if="item" :provider="provider.id" :item-id="item.id" />
+        <span class="p-dialog-title">{{ item?.name }}</span>
+      </div>
+    </template>
     <div class="stage" :class="{ text: !!raw }">
       <div v-show="item?.render === '3d'" ref="canvasHost" class="canvas" />
       <AnimatedImage v-if="imgSrc" :src="imgSrc" v-bind="imgFrames" />
@@ -307,29 +295,6 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         <Button label="GLB" icon="pi pi-download" size="small" severity="secondary" @click="downloadGlb" />
       </template>
       <Button v-if="imgSrc" label="Download image" icon="pi pi-download" size="small" @click="downloadUrl(imgSrc, imageName())" />
-      <Button
-        :icon="fav ? 'pi pi-star-fill' : 'pi pi-star'"
-        label="Favorite"
-        size="small"
-        :severity="fav ? 'warn' : 'secondary'"
-        :outlined="!fav"
-        @click="shown && collections.toggle(FAV, shown.id)"
-      />
-      <MultiSelect
-        :model-value="inLists"
-        :options="listOptions"
-        option-label="label"
-        option-value="value"
-        size="small"
-        placeholder="Collections"
-        :max-selected-labels="2"
-        class="lists"
-        @update:model-value="setLists"
-      >
-        <template #footer>
-          <div class="newlist"><Button label="New collection…" icon="pi pi-plus" size="small" text @click="addToNewList" /></div>
-        </template>
-      </MultiSelect>
       <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" text @click="copyLink" />
       <Button v-if="raw" label="Download file" icon="pi pi-download" size="small" @click="downloadUrl(raw.url, raw.name)" />
     </div>
@@ -353,8 +318,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
 .time { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 0.85rem; }
 .skin { width: 13rem; }
 .pose { width: 12rem; }
-.lists { width: 12rem; }
-.newlist { padding: 0.25rem 0.5rem; }
+.titlebar { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .help { cursor: help; opacity: 0.6; font-size: 1.1rem; }
 .help:hover { opacity: 1; }
 label { display: flex; align-items: center; gap: 0.5rem; }
