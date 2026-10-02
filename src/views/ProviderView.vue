@@ -19,6 +19,7 @@ import { applyView, decodeRules, decodeSorts, encodeRules, encodeSorts, type Rul
 import { providers } from '../providers'
 import { stats } from '../stats'
 import { COLLECTION_PREFIX, FAV, useCollections } from '../collections'
+import { askConfirm, askText, notify } from '../dialogs'
 import { clearSelection, MAX_COMPARE, selection, setSelection, toggleSelected } from '../selection'
 import Button from 'primevue/button'
 import type { CategoryDef, CosmeticItem, FieldDef } from '../providers/types'
@@ -154,20 +155,29 @@ const fields = computed<FieldDef[]>(() => {
 
 // ---- collection actions -----------------------------------------------------
 const importInput = ref<HTMLInputElement>()
-function newCollection() {
-  const name = prompt('Name of the new collection')
+async function newCollection() {
+  const name = await askText({ title: 'New collection', icon: 'pi pi-bookmark', placeholder: 'Collection name', confirmLabel: 'Create' })
   if (!name) return
   const c = collections.value.create(name)
   router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`)
 }
-function renameCollection() {
+async function renameCollection() {
   const c = collection.value
-  const name = c && prompt('Rename collection', c.name)
-  if (c && name) collections.value.rename(c.id, name)
+  if (!c) return
+  const name = await askText({ title: 'Rename collection', icon: 'pi pi-pencil', input: c.name, placeholder: 'Collection name', confirmLabel: 'Rename' })
+  if (name) collections.value.rename(c.id, name)
 }
-function deleteCollection() {
+async function deleteCollection() {
   const c = collection.value
-  if (!c || c.id === FAV || !confirm(`Delete "${c.name}"? (${c.items.length} items)`)) return
+  if (!c || c.id === FAV) return
+  const ok = await askConfirm({
+    title: 'Delete collection',
+    icon: 'pi pi-trash',
+    message: `"${c.name}" (${plural(c.items.length, 'item')}) will be deleted. This can't be undone.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
   collections.value.remove(c.id)
   router.push(`/${props.provider}/${COLLECTION_PREFIX}${FAV}`)
 }
@@ -186,9 +196,9 @@ async function importCollections(e: Event) {
   if (!file) return
   try {
     const n = collections.value.importJson(await file.text())
-    alert(`Imported ${n} item${n === 1 ? '' : 's'}.`)
+    notify('Import finished', `Imported ${plural(n, 'item')}.`, 'pi pi-check-circle')
   } catch (err) {
-    alert(String(err))
+    notify('Import failed', String(err), 'pi pi-times-circle')
   } finally {
     ;(e.target as HTMLInputElement).value = ''
   }
@@ -257,7 +267,7 @@ const compareHint = computed(() => {
 const exportHint = computed(() => {
   if (!selection.value.length) return 'Tick cards (or use Select all) to export their source files as a ZIP'
   if (!actionItems.value.length) return 'None of the selected items pass the filter. Adjust or clear the filter, or select more cards.'
-  return `Export the source files of ${actionItems.value.length} item(s) as a ZIP`
+  return `Export the source files of ${plural(actionItems.value.length, 'item')} as a ZIP`
 })
 const compare = () => router.replace({ query: { ...route.query, cmp: actionItems.value.map((it) => it.id).join(',') } })
 
@@ -274,6 +284,18 @@ watch(cols, (c) => {
   } catch {}
 })
 
+// Everything mounts every item of every category at once, which is slow on most machines: ask first.
+async function openEverything(count: number) {
+  const ok = await askConfirm({
+    title: 'Open Everything?',
+    icon: 'pi pi-exclamation-triangle',
+    warn: true,
+    message: `Everything shows all ${count.toLocaleString()} items from every category at once. It can take a long time to load and may make the page slow while it does.`,
+    confirmLabel: 'Continue',
+    remember: 'assetviewer.skipEverythingWarning',
+  })
+  if (ok) router.push(`/${props.provider}/everything`)
+}
 
 const menuModel = computed(() => {
   const groups = new Map<string, object[]>()
@@ -284,7 +306,7 @@ const menuModel = computed(() => {
       label: c.group === 'Tools' ? c.label : `${c.label} (${c.count})`,
       icon: `pi ${c.icon}`,
       class: c.id === props.category ? 'cat-active' : '',
-      command: () => router.push(`/${props.provider}/${c.id}`),
+      command: () => (c.id === 'everything' ? openEverything(c.count) : router.push(`/${props.provider}/${c.id}`)),
     })
   }
   const model = [...groups].map(([label, items]) => ({ label, items }))

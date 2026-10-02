@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import AppDialog from './components/AppDialog.vue'
 import { stats } from './stats'
 
 const route = useRoute()
@@ -18,6 +19,7 @@ const route = useRoute()
       </div>
       <div class="sec link"><a class="icon-text" href="https://github.com/prometheusreengineering/assetviewer" target="_blank" rel="noopener"><i class="pi pi-github" />GitHub</a></div>
     </footer>
+    <AppDialog />
   </div>
 </template>
 

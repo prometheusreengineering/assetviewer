@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { askText } from '../dialogs'
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
@@ -35,8 +36,9 @@ function toggle(e: Event) {
   pop.value.toggle(e)
 }
 const set = (id: string, on: boolean) => collections.set(id, props.itemId, on)
-function create() {
-  const name = prompt('Name of the new collection')
+async function create() {
+  pop.value?.hide()
+  const name = await askText({ title: 'New collection', icon: 'pi pi-bookmark', placeholder: 'Collection name', confirmLabel: 'Create' })
   if (name) {
     const c = collections.create(name)
     order.value = [...order.value, c.id]
@@ -52,7 +54,7 @@ function create() {
       :class="{ has: selected.length }"
       size="small"
       severity="secondary"
-      :title="selected.length ? `In ${selected.length} collection(s)` : 'Add to a collection'"
+      :title="selected.length ? `In ${selected.length} collection${selected.length === 1 ? '' : 's'}` : 'Add to a collection'"
       @click="toggle"
     >
       <i :class="selected.length ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'" />

@@ -86,7 +86,8 @@ function cancel() {
     :disabled="disabled || !items.length || !provider.sourceFiles"
     @click="start"
   />
-  <Dialog :visible="open" modal header="Export as ZIP" :style="{ width: 'min(460px, 92vw)' }" @update:visible="(v: boolean) => !v && cancel()">
+  <Dialog :visible="open" modal :draggable="false" :style="{ width: 'min(440px, 92vw)' }" @update:visible="(v: boolean) => !v && cancel()">
+    <template #header><span class="title icon-text"><i class="pi pi-download" />Export as ZIP</span></template>
     <div class="body">
       <template v-if="phase === 'confirm'">
         <p>{{ items.length.toLocaleString() }} items, about {{ mb(estimate) }} of source files.</p>
@@ -99,20 +100,22 @@ function cancel() {
       <p v-else-if="phase === 'done'">Downloaded ({{ message }}).</p>
       <p v-else class="err">{{ message }}</p>
       <details v-if="failed.length" class="failed">
-        <summary>{{ failed.length }} item(s) failed</summary>
+        <summary>{{ failed.length }} {{ failed.length === 1 ? 'item' : 'items' }} failed</summary>
         <div v-for="f in failed" :key="f">{{ f }}</div>
       </details>
     </div>
     <template #footer>
-      <Button v-if="phase === 'confirm'" label="Cancel" text severity="secondary" @click="cancel" />
-      <Button v-if="phase === 'confirm'" label="Export" icon="pi pi-download" @click="run" />
-      <Button v-if="phase === 'fetching' || phase === 'zipping'" label="Cancel" text severity="secondary" @click="cancel" />
-      <Button v-if="phase === 'done' || phase === 'error'" label="Close" @click="open = false" />
+      <Button v-if="phase === 'confirm'" label="Cancel" size="small" severity="secondary" @click="cancel" />
+      <Button v-if="phase === 'confirm'" label="Export" icon="pi pi-download" size="small" @click="run" />
+      <Button v-if="phase === 'fetching' || phase === 'zipping'" label="Cancel" size="small" severity="secondary" @click="cancel" />
+      <Button v-if="phase === 'done' || phase === 'error'" label="Close" size="small" @click="open = false" />
     </template>
   </Dialog>
 </template>
 
 <style scoped>
+.title { font-weight: 600; font-size: 1.1rem; gap: 0.6rem; }
+.title .pi { color: var(--p-primary-color); }
 .body { display: flex; flex-direction: column; gap: 0.75rem; }
 .dim { opacity: 0.65; font-size: 0.9rem; margin: 0; }
 p { margin: 0; }
