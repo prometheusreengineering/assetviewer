@@ -4,8 +4,8 @@ import type { CosmeticItem } from '../types'
 
 export const PREFIX = 'assets/lunar/'
 
-/** Cape textures sit directly in cosmetics/cloaks (subfolders hold extras). */
-const isCloakTex = (p: string) => /^cosmetics\/cloaks\/[^/]+\.webp$/.test(p)
+/** Cape textures sit directly in cosmetics/cloaks; listed shader cloaks keep theirs in a subfolder next to the .fsh and its extra textures. */
+const isCloakTex = (p: string) => /^cosmetics\/cloaks\/([^/]+\/)?[^/]+\.webp$/.test(p)
 
 export type Kind = 'gek' | 'obj' | 'wing2d' | 'cloak' | 'emote' | 'image' | 'file'
 

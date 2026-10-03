@@ -68,7 +68,7 @@ const CSV = [
   '1,x,x,Crown dup,x,x,hat,NONE,cosmetics/models/gek/hats/crown/crown.gek.json,x,,',
   '10,x,x,Old Mask,x,x,mask,mask,cosmetics/models/hats/mask/textures/old.webp,x,SPOOKY|DARK,BLACK',
   '11,x,x,Gone,x,x,hat,NONE,cosmetics/nope.webp,x,,',
-  '12,x,x,,x,x,cloak,NONE,cosmetics/cloaks/legacy.webp,x,,',
+  '12,x,x,,x,x,cloak,NONE,cosmetics/cloaks/legacy/legacy.webp,x,,',
   'short,row',
   '',
 ].join('\n')
@@ -121,7 +121,7 @@ export const LUNAR_FILES: [string, FileBody][] = [
   ['cosmetics/misc/flat.webp', png(8, 8)],
   ['cosmetics/models/hats/mask/mask.obj', OBJ],
   ['cosmetics/models/hats/mask/textures/old.webp', png(16, 16)],
-  ['cosmetics/cloaks/legacy.webp', png(22, 17)],
+  ['cosmetics/cloaks/legacy/legacy.webp', png(22, 17)],
   // unlisted
   [`${DOG}dog.gek.json`, DOG_GEK],
   [`${DOG}dog.geo.json`, DOG_GEO],

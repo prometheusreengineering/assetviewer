@@ -107,6 +107,7 @@ describe('loadLunarCatalog: legacy CSV', () => {
     expect(mask.item).toMatchObject({ name: 'Old Mask', category: 'mask', render: '3d' })
     expect(mask.item.fields).toEqual({ themes: ['SPOOKY', 'DARK'], colors: ['BLACK'], animated: false })
     const legacy = byId('12')
+    // a shader cloak's texture sits in a subfolder (next to its .fsh) and is still a 3D cape
     expect(legacy).toMatchObject({ kind: 'cloak', modelKey: '' })
     expect(legacy.item.name).toBe('12')
     expect(legacy.item.fields.themes).toEqual([])
