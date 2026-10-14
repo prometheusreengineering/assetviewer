@@ -1,0 +1,13 @@
+// Cloudflare Workers Builds deploys this on every push to main (build: npm run build, deploy: npx wrangler deploy).
+{
+  "name": "assetviewer",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Only the Dawn proxy runs code; every other request is a static asset.
+    "run_worker_first": ["/dawn/*"]
+  }
+}

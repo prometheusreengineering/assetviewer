@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { handle, ORIGIN } from '../../functions/dawn/[[path]]'
+import { handle, ORIGIN } from '../../worker/dawnProxy'
 
 const H = 'a'.repeat(40)
 const req = (path: string, init?: RequestInit) => new Request('https://assetviewer.dreamys.studio' + path, init)
@@ -63,5 +63,26 @@ describe('dawn proxy', () => {
     const res = await handle(req('/dawn/game/a.webp', { headers: { Range: 'bytes=0-1' } }), fetcher)
     expect(fetcher).toHaveBeenCalledWith(ORIGIN + 'game/a.webp', { headers: { Range: 'bytes=0-1' } })
     expect(res.status).toBe(206)
+  })
+})
+
+describe('site worker', () => {
+  it('proxies /dawn/* and serves everything else from the static assets', async () => {
+    const { default: worker } = await import('../../worker/index')
+    const cache = memCache()
+    vi.stubGlobal('caches', { default: cache })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
+    const assets = { fetch: vi.fn(async () => new Response('<html>')) }
+    const waits: Promise<unknown>[] = []
+    const ctx = { waitUntil: (p: Promise<unknown>) => void waits.push(p) }
+    const dawn = await worker.fetch(req('/dawn/assets_index.json'), { ASSETS: assets }, ctx)
+    expect(await dawn.text()).toBe('[]')
+    expect(waits).toHaveLength(1)
+    expect(assets.fetch).not.toHaveBeenCalled()
+    const page = await worker.fetch(req('/#/dawn/hats'), { ASSETS: assets }, ctx)
+    expect(await page.text()).toBe('<html>')
+    expect((await worker.fetch(req('/assets/index.js'), { ASSETS: assets }, ctx)).status).toBe(200)
+    expect(assets.fetch).toHaveBeenCalledTimes(2)
+    vi.unstubAllGlobals()
   })
 })

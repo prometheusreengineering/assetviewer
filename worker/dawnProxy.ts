@@ -1,11 +1,11 @@
-// Cloudflare Pages Function: same-origin proxy for the Dawn Client asset CDN, which sends no CORS headers.
+// Same-origin proxy for the Dawn Client asset CDN, which sends no CORS headers (run by worker/index.ts).
 // GET /dawn/assets_index.json and /dawn/game/...; files carry ?h=<sha1> from the index, so the edge cache key
 // changes with the content and those responses can be cached for a year.
 
 export const ORIGIN = 'https://assets.dawn.gg/assets/'
 const ALLOWED = /^(assets_index\.json|game\/[\w\-./ %]+)$/
 
-interface EdgeCache {
+export interface EdgeCache {
   match(req: Request): Promise<Response | undefined>
   put(req: Request, res: Response): Promise<void>
 }
@@ -49,6 +49,3 @@ async function sliceRange(res: Response, range: string): Promise<Response> {
   out.headers.set('Content-Length', String(end - start + 1))
   return out
 }
-
-export const onRequestGet = (ctx: { request: Request; waitUntil: (p: Promise<unknown>) => void }) =>
-  handle(ctx.request, fetch, (globalThis as unknown as { caches: { default: EdgeCache } }).caches.default, (p) => ctx.waitUntil(p))
