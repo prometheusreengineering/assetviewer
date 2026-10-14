@@ -5,7 +5,7 @@ import { connect, forget } from '../../src/providers/essential'
 import { memorySource } from '../../src/providers/essential/localData'
 import { essentialFixture } from '../fixtures/essential'
 import { installBitmapStubs } from '../helpers/bitmaps'
-import { $, $$, mountApp, settle } from '../helpers/mount'
+import { $, $$, byText, mountApp, settle } from '../helpers/mount'
 import { FakeIntersectionObserver, FakeWebGLRenderer } from '../helpers/webgl'
 
 vi.mock('three', async (orig) => {
@@ -39,6 +39,34 @@ describe('Essential setup', () => {
     expect($$('.card .name').map((e) => e.textContent)).toEqual(['Test Hat'])
     expect($('.foot')!.textContent).toContain('Essential: 4 items · 11 files')
     expect($('.foot')!.textContent).not.toContain('index')
+  })
+
+  it('the two folder fields connect the dumps and the cache (Chrome refuses AppData in its folder picker)', async () => {
+    await mountApp(App, { path: '/essential/hat' })
+    await settle(20)
+    expect($('.setup .path')!.textContent).toBe('%APPDATA%\\.minecraft\\prometheus\\essential\\dumps')
+    // a folder pick: files with paths relative to the parent of the chosen folder
+    const pick = (input: HTMLInputElement, folder: string, files: Record<string, Uint8Array | string>) => {
+      const list = Object.entries(files).map(([path, body]) => {
+        const f = new File([typeof body === 'string' ? body : (body.slice().buffer as ArrayBuffer)], path.split('/').pop()!)
+        Object.defineProperty(f, 'webkitRelativePath', { value: `${folder}/${path}` })
+        return f
+      })
+      Object.defineProperty(input, 'files', { value: list, configurable: true })
+      input.dispatchEvent(new Event('change'))
+    }
+    const [dumpsInput, cacheInput] = $$<HTMLInputElement>('.setup input[type=file]')
+    expect(byText('Show my cosmetics', 'button')!.hasAttribute('disabled')).toBe(true)
+    pick(dumpsInput!, 'dumps', fx.dumps)
+    pick(cacheInput!, 'cosmetic-cache', fx.cache)
+    await settle()
+    expect($('.setup .picked')!.textContent).toContain('5 files')
+    byText('Show my cosmetics', 'button')!.click()
+    await settle(40)
+    expect($('.setup')).toBeNull()
+    FakeIntersectionObserver.intersectAll()
+    await settle(20)
+    expect($$('.card .name').map((e) => e.textContent)).toEqual(['Test Hat'])
   })
 
   it('the modal offers the colour variants', async () => {
