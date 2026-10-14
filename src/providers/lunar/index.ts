@@ -1,4 +1,3 @@
-import { zipSync } from 'fflate'
 import { Box3, Group, Quaternion, Vector3, type MeshLambertMaterial, type Object3D } from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { fileUrl, getFileBuffer, getFileJson, getFileText } from '../../cdn'
@@ -408,6 +407,7 @@ export const lunarProvider: CosmeticProvider = {
   id: 'lunar',
   name: 'Lunar Client',
   available: true,
+  about: { host: 'textures.lunarclientcdn.com', owner: 'Lunar Client or Moonsworth', credits: ["Emotes are stored in McHorse's Blockbuster model format."] },
 
   load() {
     loading ??= loadLunarCatalog().then((c) => {
@@ -654,6 +654,4 @@ export const lunarProvider: CosmeticProvider = {
   },
 }
 
-export function zipFiles(files: DownloadFile[]): Uint8Array<ArrayBuffer> {
-  return zipSync(Object.fromEntries(files.map((f) => [f.name, f.data]))) as Uint8Array<ArrayBuffer>
-}
+export { zipFiles } from '../../download'

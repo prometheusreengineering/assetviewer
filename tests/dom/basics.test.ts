@@ -99,11 +99,11 @@ describe('ProviderSwitch', () => {
     await wrapper.find('.switch').trigger('click')
     await settle()
     const opts = $$('.opt')
-    expect(opts.map((o) => o.querySelector('strong')!.textContent)).toEqual(['Lunar Client', 'Essential'])
+    expect(opts.map((o) => o.querySelector('strong')!.textContent)).toEqual(['Lunar Client', 'Dawn Client', 'Essential'])
     expect(opts[0]!.classList.contains('on')).toBe(true)
     opts[1]!.click()
     await settle()
-    expect(router.currentRoute.value.path).toBe('/essential')
+    expect(router.currentRoute.value.path).toBe('/dawn')
     wrapper.unmount()
   })
   it('picking the current provider stays put; unknown providers fall back to the first', async () => {
@@ -123,9 +123,13 @@ describe('ProviderSwitch', () => {
 
 describe('HomeView / ControlsHelp', () => {
   it('home describes the provider and links the project', async () => {
-    const { wrapper } = await mountApp(HomeView, { props: { name: 'Lunar Client' } })
+    const provider = { id: 'x', name: 'Dawn Client', available: true, about: { host: 'assets.example', owner: 'Dawn Client', credits: ['Thanks!'] } } as never
+    const { wrapper } = await mountApp(HomeView, { props: { provider } })
     expect(wrapper.find('h1').text()).toBe('Asset Viewer')
-    expect(wrapper.find('.lead').text()).toContain('Lunar Client cosmetics')
+    expect(wrapper.find('.lead').text()).toContain('Dawn Client cosmetics')
+    expect(wrapper.text()).toContain('loaded from assets.example')
+    expect(wrapper.text()).toContain('not affiliated with Dawn Client')
+    expect(wrapper.text()).toContain('Thanks!')
     expect(wrapper.findAll('a').map((a) => a.attributes('href'))).toContain('https://github.com/prometheusreengineering/assetviewer')
     expect(wrapper.findAll('a').every((a) => a.attributes('rel') === 'noopener')).toBe(true)
   })

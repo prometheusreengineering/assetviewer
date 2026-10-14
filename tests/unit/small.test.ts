@@ -71,8 +71,8 @@ describe('config and providers', () => {
     expect(LUNAR_INDEXES).toHaveLength(2)
     for (const h of LUNAR_INDEXES) expect(h).toMatch(/^[0-9a-f]{40}$/)
   })
-  it('registers lunar and essential by id', () => {
-    expect(Object.keys(providers)).toEqual(['lunar', 'essential'])
+  it('registers lunar, dawn and essential by id', () => {
+    expect(Object.keys(providers)).toEqual(['lunar', 'dawn', 'essential'])
     expect(providers.lunar).toBe(lunarProvider)
     expect(providers.essential).toBe(essentialProvider)
     for (const [id, p] of Object.entries(providers)) expect(p.id).toBe(id)

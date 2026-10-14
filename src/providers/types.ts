@@ -86,6 +86,8 @@ export interface CosmeticProvider {
   id: string
   name: string
   available: boolean
+  /** Where the assets are served from and who owns them (footer and home page). */
+  about?: { host: string; owner: string; credits?: string[] }
   load(): Promise<void>
   categories(): CategoryDef[]
   fields(category: string): FieldDef[]

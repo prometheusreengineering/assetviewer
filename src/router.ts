@@ -6,6 +6,6 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', redirect: '/lunar' },
-    { path: '/:provider(lunar|essential)/:category?', component: ProviderView, props: true },
+    { path: '/:provider(lunar|dawn|essential)/:category?', component: ProviderView, props: true },
   ],
 })

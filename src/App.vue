@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppDialog from './components/AppDialog.vue'
+import { providers } from './providers'
 import { stats } from './stats'
 
 const route = useRoute()
+const about = computed(() => (providers[String(route.params.provider)] ?? providers.lunar)?.about)
 </script>
 
 <template>
   <div class="shell">
     <router-view :key="String(route.params.provider)" />
     <footer class="foot">
-      <div class="sec text">Not affiliated with Lunar Client or Moonsworth. Assets are served from textures.lunarclientcdn.com.</div>
+      <div class="sec text"><template v-if="about">Not affiliated with {{ about.owner }}. Assets are served from {{ about.host }}.</template></div>
       <div class="sec stats">
         <template v-if="stats">
           {{ stats.name }}: {{ stats.items.toLocaleString() }} items · {{ stats.files.toLocaleString() }} files · index

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{ name: string }>()
+import type { CosmeticProvider } from '../providers/types'
+
+defineProps<{ provider: CosmeticProvider }>()
 </script>
 
 <template>
@@ -7,7 +9,7 @@ defineProps<{ name: string }>()
     <article>
       <h1>Asset Viewer</h1>
       <p class="lead">
-        An unofficial viewer for {{ name }} cosmetics. Browse every hat, cloak, wing, pet, emote and resource on the
+        An unofficial viewer for {{ provider.name }} cosmetics. Browse every hat, cloak, wing, pet and resource on the
         public asset CDN, preview them in 3D, try them on a player with your own skin, and download the source files.
       </p>
 
@@ -21,8 +23,11 @@ defineProps<{ name: string }>()
 
       <h2>Credits</h2>
       <ul>
-        <li>Cosmetics, textures and models belong to their owners and are loaded from textures.lunarclientcdn.com. This project is not affiliated with Lunar Client or Moonsworth.</li>
-        <li>Emotes are stored in McHorse's Blockbuster model format.</li>
+        <li v-if="provider.about">
+          Cosmetics, textures and models belong to their owners and are loaded from {{ provider.about.host }}. This project is not affiliated with
+          {{ provider.about.owner }}.
+        </li>
+        <li v-for="c in provider.about?.credits ?? []" :key="c">{{ c }}</li>
         <li>Player skins are loaded from mc-heads.net.</li>
         <li>Built with Vue, PrimeVue and three.js.</li>
       </ul>

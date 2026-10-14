@@ -253,6 +253,8 @@ export function buildDawnCatalog(index: DawnIndexEntry[], indexHash = ''): DawnC
   }
 
   setCollections(entries)
+  // Grids list items by name (the index is grouped by file kind, so variants came after every model).
+  entries.sort((x, y) => x.item.name.localeCompare(y.item.name, 'en', { numeric: true }))
   return { files, entries, indexHash }
 }
 

@@ -61,7 +61,7 @@ const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX)
 watchEffect(() => {
   const c = props.category
   const label = c === 'home' || !c ? '' : collection.value?.name ?? categories.value.find((x) => x.id === c)?.label ?? ''
-  document.title = label ? `${label} · Asset Viewer` : provider.value.available ? 'Asset Viewer – Lunar Client cosmetics viewer' : `${provider.value.name} · Asset Viewer`
+  document.title = label ? `${label} · Asset Viewer` : provider.value.available ? `Asset Viewer – ${provider.value.name} cosmetics viewer` : `${provider.value.name} · Asset Viewer`
 })
 
 // Categories bigger than this get a performance warning.
@@ -348,7 +348,7 @@ const menuModel = computed(() => {
       <Message v-else-if="error" severity="error" class="m">{{ error }}</Message>
       <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
       <template v-else>
-      <HomeView v-if="isHome" :name="provider.name" />
+      <HomeView v-if="isHome" :provider="provider" />
       <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
       <template v-else>
       <div v-if="collection" class="collbar">
