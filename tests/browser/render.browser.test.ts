@@ -63,7 +63,9 @@ describe('material and geometry', () => {
     const c = new OffscreenCanvas(32, 32)
     const g = c.getContext('2d')!
     g.fillStyle = '#00ff00'
-    g.fillRect(0, 0, 16, 32)
+    // opaque outer quarters, a cut-out middle (the fit spans the opaque texels, so both edges keep it full width)
+    g.fillRect(0, 0, 8, 32)
+    g.fillRect(24, 0, 8, 32)
     const mat = createMaterial(createTexture(await createImageBitmap(c)))
     const host = box(document.createElement('div'), { width: '200px', height: '200px' })
     document.body.append(host)
@@ -76,11 +78,10 @@ describe('material and geometry', () => {
     const r = (viewer as unknown as { renderer: WebGLRenderer }).renderer
     await new Promise((res) => setTimeout(res, 100))
     r.render((viewer as unknown as { scene: never }).scene, (viewer as unknown as { camera: never }).camera)
-    // one half of the plane is opaque green, the other half cut out
-    const left = pixel(r, 70, 100)
-    const right = pixel(r, 130, 100)
-    const alphas = [left[3], right[3]].sort()
-    expect(alphas).toEqual([0, 255])
+    // the plane spans about 40..160 px: the outer quarters are opaque green, the middle is cut out
+    expect(pixel(r, 50, 100)[3]).toBe(255)
+    expect(pixel(r, 150, 100)[3]).toBe(255)
+    expect(pixel(r, 100, 100)[3]).toBe(0)
   })
 })
 

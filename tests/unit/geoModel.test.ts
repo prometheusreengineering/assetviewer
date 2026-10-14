@@ -80,6 +80,21 @@ describe('buildCube', () => {
     const m = buildCube(cube({ uv: [10, 20] }), 64, 64, mat(), 0, true)
     expect(faceUv(m, 4)).toEqual([[22, 24], [20, 24], [22, 27], [20, 27]])
   })
+  it('flipU on per-face UVs: sides flip u, up/down flip v, east/west trade sides', () => {
+    const r = (u: number, v: number) => ({ uv: [u, v] as [number, number], uv_size: [2, 2] as [number, number] })
+    const m = buildCube(cube({ uv: { north: r(0, 0), south: r(10, 0), east: r(20, 0), west: r(30, 0), up: r(40, 0), down: r(50, 0) } }), 64, 64, mat(), 0, true)
+    // +z south: u flipped
+    expect(faceUv(m, 4)).toEqual([[12, 0], [10, 0], [12, 2], [10, 2]])
+    // +y up: Blockbench writes up/down turned 180 degrees, so v is flipped instead (hinged wing art stays whole)
+    expect(faceUv(m, 2)).toEqual([[40, 2], [42, 2], [40, 0], [42, 0]])
+    expect(faceUv(m, 3)).toEqual([[50, 2], [52, 2], [50, 0], [52, 0]])
+    // the rig is mirrored on x afterwards, so "east" is drawn on the -x face and "west" on +x
+    expect(faceUv(m, 1)).toEqual([[22, 0], [20, 0], [22, 2], [20, 2]])
+    expect(faceUv(m, 0)).toEqual([[32, 0], [30, 0], [32, 2], [30, 2]])
+    // box UV keeps the plain u flip on every face
+    const box = buildCube(cube({ uv: [10, 20] }), 64, 64, mat(), 0, true)
+    expect(faceUv(box, 2)).toEqual([[16, 20], [14, 20], [16, 24], [14, 24]])
+  })
 })
 
 describe('rotationOf', () => {

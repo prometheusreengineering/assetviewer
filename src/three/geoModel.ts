@@ -118,11 +118,13 @@ export function buildCube(cube: GeoCube, texW: number, texH: number, material: M
   // negative BoxGeometry would put every face texture on the opposite side, leaving sides see-through.
   const geo = new BoxGeometry(Math.abs(cube.size[0]) + inf * 2, Math.abs(cube.size[1]) + inf * 2, Math.abs(cube.size[2]) + inf * 2)
   const rects = faceRects(cube)
+  const perFace = !!cube.uv && !Array.isArray(cube.uv)
   const uvs: number[] = []
   const faces = geo.getIndex()!
   const keep: number[] = []
   FACE_ORDER.forEach((f, i) => {
-    const r = rects[f]
+    // The rig is built in file space and mirrored on x afterwards, so a per-face "east" belongs on the -x side.
+    const r = rects[flipU && perFace && f === 'east' ? 'west' : flipU && perFace && f === 'west' ? 'east' : f]
     // Faces without texture area (the edges of flat planes, faces the model leaves out) are dropped: drawn,
     // they sample one texel and outline every flat part with a hairline once the cube is inflated.
     if (!r || !r[2] || !r[3]) {
@@ -130,7 +132,11 @@ export function buildCube(cube: GeoCube, texW: number, texH: number, material: M
       return
     }
     let [u, v, w, h] = r
-    if (flipU) [u, w] = [u + w, -w]
+    // Undo the rig's mirror image. Blockbench writes per-face up/down UVs turned 180 degrees, so those are
+    // flipped along v instead (the same un-mirroring, turned back): flipping u tore art that continues across
+    // a hinge (snowflake, cobweb and bat wings).
+    if (flipU && perFace && (f === 'up' || f === 'down')) [v, h] = [v + h, -h]
+    else if (flipU) [u, w] = [u + w, -w]
     // vertex order per face as seen from outside: TL, TR, BL, BR
     uvs.push(u / texW, v / texH, (u + w) / texW, v / texH, u / texW, (v + h) / texH, (u + w) / texW, (v + h) / texH)
     for (let k = 0; k < 6; k++) keep.push(faces.getX(i * 6 + k))

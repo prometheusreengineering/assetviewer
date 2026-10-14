@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Vector3 } from 'three'
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Texture, Vector3 } from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { disposeObject, fitObject, visibleBox } from '../../src/three/fit'
 
@@ -41,6 +41,69 @@ describe('visibleBox', () => {
     expect(b.isEmpty()).toBe(false)
     expect(round(b.getCenter(new Vector3()))).toEqual([2, 0, 0])
     expect(round(b.getSize(new Vector3()))).toEqual([0, 0, 0])
+  })
+})
+
+describe('visibleBox: opaque texels only', () => {
+  /** An OffscreenCanvas whose pixels are opaque where `opaque(x, y)` (in the drawn size). */
+  function stubCanvas(opaque: (x: number, y: number, w: number, h: number) => boolean) {
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        w: number
+        h: number
+        constructor(w: number, h: number) {
+          this.w = w
+          this.h = h
+        }
+        getContext() {
+          const { w, h } = this
+          return {
+            drawImage() {},
+            getImageData: () => ({ data: Uint8ClampedArray.from({ length: w * h * 4 }, (_, i) => (i % 4 === 3 && opaque(Math.floor(i / 4) % w, Math.floor(i / 4 / w), w, h) ? 255 : 0)) }),
+          }
+        }
+      },
+    )
+  }
+  const plane = (image: object) => {
+    const tex = new Texture(image as never)
+    tex.flipY = false
+    const geo = new BoxGeometry(4, 4, 0)
+    // only the +z face, like buildCube keeps for a flat plane textured on one side
+    geo.setIndex(Array.from({ length: 6 }, (_, k) => geo.getIndex()!.getX(4 * 6 + k)))
+    return new Mesh(geo, new MeshBasicMaterial({ map: tex }))
+  }
+
+  it('a plane counts only where its texture is opaque', () => {
+    // opaque in the left half of the image
+    stubCanvas((x, _y, w) => x < w / 2)
+    const b = visibleBox(plane({ width: 16, height: 16 }))
+    expect(round(b.min)[0]).toBeCloseTo(-2, 0)
+    expect(round(b.max)[0]).toBeLessThan(0.3)
+    expect(round(b.max)[1]).toBeGreaterThan(1.5)
+    vi.unstubAllGlobals()
+  })
+
+  it('animated grids count a texel opaque in any frame', () => {
+    // two frames side by side: frame 0 opaque on its left quarter, frame 1 on its right quarter
+    stubCanvas((x, _y, w) => x < w / 8 || x >= (w * 7) / 8)
+    const m = plane({ width: 32, height: 16 })
+    m.material.map!.repeat.set(0.5, 1)
+    const b = visibleBox(m)
+    expect(round(b.min)[0]).toBeLessThan(-1.5)
+    expect(round(b.max)[0]).toBeGreaterThan(1.5)
+    vi.unstubAllGlobals()
+  })
+
+  it('falls back to the geometry when pixels cannot be read', () => {
+    vi.stubGlobal('OffscreenCanvas', class {
+      getContext() {
+        return { drawImage() {} }
+      }
+    })
+    expect(round(visibleBox(plane({ width: 8, height: 8 })).getSize(new Vector3()))).toEqual([4, 4, 0])
+    vi.unstubAllGlobals()
   })
 })
 
