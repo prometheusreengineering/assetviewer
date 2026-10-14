@@ -1,4 +1,4 @@
-import { Group, Mesh, MeshLambertMaterial, Object3D } from 'three'
+import { Group, Matrix4, Mesh, MeshLambertMaterial, Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
 import { compile, newScope } from '../../src/three/animation/molang'
 import { EffectPlayer, particleCues } from '../../src/three/effects'
@@ -98,5 +98,63 @@ describe('Essential particle JSON', () => {
     compile('{variable.a = 2; variable.b = variable.a * 3;}', new Map())(s)
     expect(s.v.b).toBe(6)
     expect(compile('{variable.c = 1;} + 4', new Map())(s)).toBe(5)
+  })
+})
+
+describe('collision and lifetime events', () => {
+  const falling = (collision: Record<string, unknown>, extra: Record<string, unknown> = {}): Scheme => ({
+    particle_effect: {
+      description: { identifier: 'test:drop', basic_render_parameters: { texture: 'x' } },
+      components: {
+        'minecraft:emitter_rate_instant': { num_particles: 1 },
+        'minecraft:emitter_lifetime_once': { active_time: 0.05 },
+        'minecraft:emitter_shape_point': { offset: [0, 1, 0] },
+        'minecraft:particle_lifetime_expression': { max_lifetime: 3 },
+        'minecraft:particle_motion_dynamic': { linear_acceleration: [0, -10, 0] },
+        'minecraft:particle_motion_collision': collision,
+        'minecraft:particle_appearance_billboard': { size: [0.1, 0.1] },
+        ...extra,
+      },
+    },
+  })
+  const yOf = (e: { object: Mesh }) => (e.object.geometry.getAttribute('aCenter').array as Float32Array)[1]!
+
+  it('particles land on the floor (y = 0) and bounce with the restitution', async () => {
+    const { Emitter } = await import('../../src/three/particles')
+    const e = new Emitter(falling({ collision_radius: 0.1, coefficient_of_restitution: 0.5 }), new Map(), undefined, () => new Matrix4())
+    e.setEnabled(true)
+    for (let i = 0; i < 60; i++) e.step(1 / 30)
+    expect(e.object.geometry.drawRange.count / 6).toBe(1)
+    expect(yOf(e)).toBeGreaterThanOrEqual(0.1 - 1e-6)
+  })
+
+  it('expire_on_contact removes the particle and fires its expiration event', async () => {
+    const { Emitter } = await import('../../src/three/particles')
+    const scheme = falling({ expire_on_contact: true }, { 'minecraft:particle_lifetime_events': { expiration_event: 'splash' } })
+    scheme.particle_effect.events = { splash: { particle_effect: { effect: 'test:splash', type: 'emitter' } } }
+    const e = new Emitter(scheme, new Map(), undefined, () => new Matrix4())
+    const events: [string, number][] = []
+    e.onEvent = (id, _x, y) => void events.push([id, y])
+    e.setEnabled(true)
+    for (let i = 0; i < 60; i++) e.step(1 / 30)
+    expect(e.object.geometry.drawRange.count).toBe(0)
+    expect(events).toHaveLength(1)
+    expect(events[0]![0]).toBe('test:splash')
+    expect(events[0]![1]).toBeLessThan(0.05)
+    expect(e.done).toBe(true)
+  })
+
+  it('the effect player starts event effects where they fire, and removes them once finished', () => {
+    const drop = falling({ expire_on_contact: true }, { 'minecraft:particle_lifetime_events': { expiration_event: 'splash' } })
+    drop.particle_effect.events = { splash: { sequence: [{ particle_effect: { effect: 'test:spark' } }] } }
+    const space = new Group()
+    space.updateMatrixWorld(true)
+    const p = new EffectPlayer([{ anim: 'a', length: 10, time: 0, effect: 'test:drop' }], new Map([['test:drop', { scheme: drop }], ['test:spark', { scheme: scheme() }]]), new Map(), space)
+    for (let t = 0; t <= 1500; t += 33) p.tick(t)
+    // the drop's emitter plus a spark effect started at the landing point
+    expect(p.object.children.length).toBe(2)
+    for (let t = 1500; t <= 9000; t += 33) p.tick(t)
+    expect(p.object.children.length).toBe(1)
+    p.dispose()
   })
 })

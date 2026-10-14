@@ -4,7 +4,8 @@ import { fitObject } from '../../three/fit'
 import { createTexture } from '../../three/geoModel'
 import { Emitter, type Scheme } from '../../three/particles'
 import type { FnLib } from '../../three/animation/molang'
-import { Euler, Group, Matrix4, Quaternion, Vector3, type Texture } from 'three'
+import { BoxGeometry, CanvasTexture, Euler, Group, Matrix4, Mesh, MeshLambertMaterial, NearestFilter, Quaternion, SRGBColorSpace, Vector3, type Object3D, type Texture } from 'three'
+import { vanillaImage } from '../../three/vanillaTextures'
 import { createPlayer, type Player } from '../../three/player'
 import { isSlimSkin, skinBitmap } from '../../skin'
 import type { DownloadFile, LoadedModel, Timeline } from '../types'
@@ -193,10 +194,15 @@ const loadScheme = (name: string, hashOf: HashOf) => {
   return p
 }
 
-/** Textures of the vanilla particle atlas (and blocks/items) aren't on the CDN: the atlas has a Lunar copy, the rest is a plain tint. */
+/**
+ * Textures of the vanilla particle atlas (and blocks/items) aren't on the CDN: the atlas has a Lunar copy,
+ * dirt/snow/snowball get drawn stand-ins (vanillaTextures.ts), anything else is a plain tint.
+ */
 async function particleTexture(ref: string, hashOf: HashOf): Promise<Texture | undefined> {
   const rel = ref.startsWith('lunar:') ? strip(ref) : ref === 'textures/particle/particles' ? 'particles/textures/default_particles.webp' : ''
   try {
+    const stand = rel ? undefined : vanillaImage(ref)
+    if (stand) return createTexture(await createImageBitmap(stand))
     return createTexture(rel ? await bitmapOf(rel, hashOf) : await solidBitmap())
   } catch {
     return undefined
@@ -220,6 +226,8 @@ export interface Effects {
 /** Particle effects of an emote: its `morph` entries from particles/configuration.json (scheme + bone + start/length), or `particleEffect`. */
 export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player, durationTicks: number): Promise<Effects | undefined> {
   const entries: { scheme: string; bone: string; start: number; end: number; local: Matrix4 }[] = []
+  // Blockbuster block morphs ({Block:"minecraft:grass"}): a block held on a bone for a while.
+  const blockEntries: { block: string; bone: string; start: number; end: number; local: Matrix4 }[] = []
   const toLocal = (m: MorphEntry) => {
     const t = m.translate ?? [0, 0, 0]
     const r = m.rotation ?? [0, 0, 0]
@@ -232,6 +240,8 @@ export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player,
       particleCfg ??= getFileJson(hashOf('particles/configuration.json'))
       for (const m of (await particleCfg)[em.morph]?.morphs ?? []) {
         const scheme = /Scheme:"([^"]+)"/.exec(m.morph)?.[1]
+        const block = /Block:"minecraft:(\w+)"/.exec(m.morph)?.[1]
+        if (block) blockEntries.push({ block, bone: m.bone ?? 'anchor', start: m.start ?? 0, end: (m.start ?? 0) + (m.length ?? durationTicks), local: toLocal(m) })
         if (!scheme) continue
         entries.push({ scheme, bone: m.bone ?? 'anchor', start: m.start ?? 0, end: (m.start ?? 0) + (m.length ?? durationTicks), local: toLocal(m) })
       }
@@ -240,7 +250,7 @@ export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player,
   } catch (e) {
     console.warn('particle config', e)
   }
-  if (!entries.length) return undefined
+  if (!entries.length && !blockEntries.length) return undefined
   const object = new Group()
   const inv = new Matrix4()
   const emitters: { e: Emitter; start: number; end: number }[] = []
@@ -261,11 +271,27 @@ export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player,
     object.add(e.object)
     emitters.push({ e, start: en.start, end: en.end })
   }
-  if (!emitters.length) return undefined
+  const blocks: { mesh: Mesh; bone: Object3D; local: Matrix4; start: number; end: number }[] = []
+  for (const b of blockEntries) {
+    const bone = player.skel.bones.get(b.bone)
+    if (!bone) continue
+    const mesh = blockMesh(b.block)
+    mesh.matrixAutoUpdate = false
+    mesh.visible = false
+    object.add(mesh)
+    blocks.push({ mesh, bone, local: b.local, start: b.start, end: b.end })
+  }
+  if (!emitters.length && !blocks.length) return undefined
   let last = -1
+  const blockInv = new Matrix4()
   return {
     object,
     update(tick) {
+      if (blocks.length) blockInv.copy(player.object.matrixWorld).invert()
+      for (const b of blocks) {
+        b.mesh.visible = tick >= b.start && tick < b.end
+        if (b.mesh.visible) b.mesh.matrix.copy(blockInv).multiply(b.bone.matrixWorld).multiply(b.local)
+      }
       const dt = (tick - last) / 20
       if (last < 0 || dt < 0 || dt > 0.5) for (const x of emitters) x.e.reset()
       const step = last < 0 || dt < 0 || dt > 0.5 ? 0 : dt
@@ -275,8 +301,36 @@ export async function emoteEffects(em: EmoteDef, hashOf: HashOf, player: Player,
         x.e.step(step)
       }
     },
-    dispose: () => emitters.forEach((x) => x.e.dispose()),
+    dispose: () => {
+      emitters.forEach((x) => x.e.dispose())
+      for (const b of blocks) {
+        b.mesh.geometry.dispose()
+        for (const m of b.mesh.material as MeshLambertMaterial[]) {
+          m.map?.dispose()
+          m.dispose()
+        }
+      }
+    },
   }
+}
+
+/** A one-block cube with the stand-in textures (grass: grass top, dirt bottom, grass sides). */
+function blockMesh(block: string): Mesh {
+  const face = (name: string) => {
+    const img = vanillaImage(name)
+    const tex = img ? new CanvasTexture(img as unknown as HTMLCanvasElement) : null
+    if (tex) {
+      tex.magFilter = NearestFilter
+      tex.colorSpace = SRGBColorSpace
+    }
+    return new MeshLambertMaterial({ map: tex, color: tex ? 0xffffff : 0x8a6a4a })
+  }
+  const grass = block === 'grass' || block === 'grass_block'
+  const side = face(grass ? 'grass_side' : block)
+  const top = grass ? face('grass_top') : side
+  const bottom = grass ? face('dirt') : side
+  // BoxGeometry face order: +x, -x, +y, -y, +z, -z
+  return new Mesh(new BoxGeometry(1, 1, 1), [side, side, top, bottom, side, side])
 }
 
 export async function loadEmote(em: EmoteDef, data: EmotesJson, hashOf: HashOf): Promise<LoadedModel> {

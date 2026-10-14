@@ -153,7 +153,7 @@ export const LUNAR_FILES: [string, FileBody][] = [
   ['emotes/models/actions_b.bobj', '# b\n' + actionBlock('dance', 30) + actionBlock('wave_hello', 40)],
   ['emotes/models/props/hat_prop.bobj', PROPS_BOBJ],
   ['particles/textures/default_particles.webp', png(128, 128)],
-  ['particles/configuration.json', { sparkle: { morphs: [{ morph: '{Scheme:"sparks"}', bone: 'head', start: 10, length: 20, translate: [0, 0.5, 0] }, { morph: 'no scheme here' }, { morph: '{Scheme:"sparks"}', bone: 'no_such_bone' }] }, broken: { morphs: [{ morph: '{Scheme:"missing"}' }] } }],
+  ['particles/configuration.json', { sparkle: { morphs: [{ morph: '{Scheme:"sparks"}', bone: 'head', start: 10, length: 20, translate: [0, 0.5, 0] }, { morph: 'no scheme here' }, { morph: '{Scheme:"sparks"}', bone: 'no_such_bone' }] }, broken: { morphs: [{ morph: '{Scheme:"missing"}' }] }, earth: { morphs: [{ morph: '{Meta:0b,Block:"minecraft:grass",Name:"block"}', bone: 'head', start: 5, length: 10, translate: [0, 0.5, 0] }] } }],
   ['particles/schemes/sparks.particle.json', SPARKS],
   ['icons/x.png', png(16, 16)],
   ['misc/y.jpg', 'jpeg'],

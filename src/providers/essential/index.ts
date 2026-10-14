@@ -6,7 +6,7 @@ import { decodeFrames } from '../../three/animatedImage'
 import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
-import { EffectPlayer, particleCues, type LoadedEffect } from '../../three/effects'
+import { EffectPlayer, eventEffectIds, particleCues, type LoadedEffect } from '../../three/effects'
 import { addGlowLayer, transparentPixel } from '../../three/glow'
 import { createTexture } from '../../three/geoModel'
 import type { Scheme } from '../../three/particles'
@@ -155,15 +155,23 @@ const blankBitmap = transparentPixel
  * UVs are laid out on it (a cape's flame sprite sits in its spare corner).
  */
 async function loadEffects(e: EssentialEntry, wanted: Set<string>, own: Texture): Promise<Map<string, LoadedEffect>> {
-  const out = new Map<string, LoadedEffect>()
+  // Every particle file of the cosmetic by identifier; the wanted ones and those their events start.
+  const all = new Map<string, Scheme>()
   for (const path of e.files.keys()) {
-    if (!path.endsWith('.particle.json') || out.size >= wanted.size) continue
+    if (!path.endsWith('.particle.json')) continue
     const scheme = await json<Scheme>(e, path).catch(() => undefined)
     const id = scheme?.particle_effect?.description?.identifier
-    if (!scheme || !id || !wanted.has(id) || out.has(id)) continue
+    if (scheme && id && !all.has(id)) all.set(id, scheme)
+  }
+  const out = new Map<string, LoadedEffect>()
+  const queue = [...wanted]
+  for (let id = queue.shift(); id; id = queue.shift()) {
+    const scheme = all.get(id)
+    if (!scheme || out.has(id)) continue
     const ref = scheme.particle_effect.description.basic_render_parameters?.texture ?? ''
     const file = await effectTexture(e, ref)
     out.set(id, file ? { scheme, texture: file } : { scheme, texture: own, shared: true })
+    queue.push(...eventEffectIds(scheme))
   }
   return out
 }

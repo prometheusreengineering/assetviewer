@@ -20,6 +20,7 @@ export interface Scheme {
     description: { identifier?: string; basic_render_parameters: { texture: string; material?: string; bone?: string } }
     curves?: Record<string, any>
     components: Record<string, any>
+    events?: Record<string, any>
   }
 }
 
@@ -122,6 +123,23 @@ void main() {
   #include <colorspace_fragment>
 }`
 
+const _ev = new Vector3()
+
+/** Effect ids an event starts (a `particle_effect`, or a `sequence`/`randomize` of them). */
+export function eventEffects(events: unknown, name: unknown): string[] {
+  if (typeof name !== 'string' || !events || typeof events !== 'object') return []
+  const out: string[] = []
+  const walk = (ev: unknown) => {
+    if (!ev || typeof ev !== 'object') return
+    const o = ev as { particle_effect?: { effect?: unknown }; sequence?: unknown[]; randomize?: unknown[] }
+    if (typeof o.particle_effect?.effect === 'string') out.push(o.particle_effect.effect)
+    for (const x of o.sequence ?? []) walk(x)
+    for (const x of o.randomize ?? []) walk(x)
+  }
+  walk((events as Record<string, unknown>)[name])
+  return out
+}
+
 export class Emitter {
   readonly object: Mesh
   private curves: Curve[] = []
@@ -168,6 +186,12 @@ export class Emitter {
   private active: (age: number, s: Scope) => { active: boolean; cycle: number; length: number }
   private local: boolean
   private perUpdate?: Compiled
+  /** Ground collision (the floor of the space the particles live in, y = 0): radius, bounce, drag, or vanish. */
+  private collision?: { enabled: Compiled; radius: number; restitution: number; drag: number; expire: boolean }
+  private createEvents: string[] = []
+  private expireEvents: string[] = []
+  /** Called with an effect id and a position (in the particles' space) when a lifetime event fires. */
+  onEvent?: (effect: string, x: number, y: number, z: number) => void
 
   private texture: Texture | undefined
   private matrix: () => Matrix4
@@ -271,6 +295,19 @@ export class Emitter {
       const off = ex.expiration_expression ? num(ex.expiration_expression, lib) : undefined
       this.active = (_, s) => ({ active: on(s) !== 0 && !(off && off(s) !== 0), cycle: 0, length: 0 })
     } else this.active = () => ({ active: true, cycle: 0, length: 0 })
+    const col = c['minecraft:particle_motion_collision']
+    if (col) {
+      this.collision = {
+        enabled: num(col.enabled ?? 1, lib, 1),
+        radius: Number(col.collision_radius) || 0,
+        restitution: Number(col.coefficient_of_restitution) || 0,
+        drag: Number(col.collision_drag) || 0,
+        expire: !!col.expire_on_contact,
+      }
+    }
+    const le = c['minecraft:particle_lifetime_events']
+    this.createEvents = eventEffects(e.events, le?.creation_event)
+    this.expireEvents = eventEffects(e.events, le?.expiration_event)
     const init = c['minecraft:emitter_initialization']
     this.perUpdate = init?.per_update_expression ? compile(String(init.per_update_expression), lib) : undefined
     this.initExpr = init?.creation_expression ? compile(String(init.creation_expression), lib) : undefined
@@ -351,6 +388,19 @@ export class Emitter {
     for (const c of this.curves) v[c.name] = curveValue(c, this.scope)
   }
 
+  /** Fires lifetime-event effects at a particle's position (in the particles' space). */
+  private fire(effects: string[], p: Particle, m: Matrix4) {
+    if (!this.onEvent) return
+    _ev.set(p.x, p.y, p.z)
+    if (this.local) _ev.applyMatrix4(m)
+    for (const id of effects) this.onEvent(id, _ev.x, _ev.y, _ev.z)
+  }
+
+  /** Nothing left to show: inactive (or never started) and no particles in the air. */
+  get done() {
+    return this.parts.length === 0 && (!this.on || (this.age > 0 && !this.active(this.age, this.scope).active))
+  }
+
   private spawn(m: Matrix4) {
     const p: Particle = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, life: 1, rot: 0, rotRate: 0, r: [rnd(), rnd(), rnd(), rnd()], ox: 0, oy: 0, oz: 0 }
     this.setVars(p)
@@ -409,6 +459,7 @@ export class Emitter {
       vz = _v.z * k
     }
     Object.assign(p, { x: px, y: py, z: pz, vx, vy, vz, ox: px, oy: py, oz: pz })
+    if (this.createEvents.length) this.fire(this.createEvents, p, m)
     this.parts.push(p)
   }
 
@@ -451,7 +502,10 @@ export class Emitter {
     for (const p of this.parts) {
       p.age += dt
       this.setVars(p)
-      if (p.age >= p.life || (this.expire && this.expire(s) !== 0)) continue
+      if (p.age >= p.life || (this.expire && this.expire(s) !== 0)) {
+        if (this.expireEvents.length) this.fire(this.expireEvents, p, m)
+        continue
+      }
       if (this.rel) {
         const r = this.rel(s)
         p.x = p.ox + r[0]!
@@ -466,6 +520,22 @@ export class Emitter {
         p.x += p.vx * dt
         p.y += p.vy * dt
         p.z += p.vz * dt
+        const col = this.collision
+        if (col && !this.local && p.y - col.radius < 0 && col.enabled(s) !== 0) {
+          if (col.expire) {
+            if (this.expireEvents.length) this.fire(this.expireEvents, p, m)
+            continue
+          }
+          p.y = col.radius
+          p.vy = -p.vy * col.restitution
+          // collision_drag slows the sliding speed (blocks/s per second)
+          const sp = Math.hypot(p.vx, p.vz)
+          if (sp > 0) {
+            const k = Math.max(0, sp - col.drag * dt) / sp
+            p.vx *= k
+            p.vz *= k
+          }
+        }
       }
       p.rotRate += (this.rotAccel(s) - this.rotDrag(s) * p.rotRate) * dt
       p.rot += p.rotRate * dt

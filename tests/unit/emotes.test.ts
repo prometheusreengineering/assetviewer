@@ -1,4 +1,4 @@
-import { Mesh } from 'three'
+import { Mesh, Vector3 } from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { EmotesJson } from '../../src/providers/lunar/catalog'
 import { BODY, emoteEffects, emoteSources, emoteTimeline, findAction, newPlayer, playerBody } from '../../src/providers/lunar/emotes'
@@ -157,6 +157,24 @@ describe('emoteEffects', () => {
     fx.update(0)
     fx.update(5)
     expect(live(fx)[0]).toBeGreaterThan(0)
+  })
+  it('block morphs: a grass block on its bone during its window', async () => {
+    const p = await newPlayer(hashOf)
+    const fx = (await emoteEffects({ ...emote(2), morph: 'earth' }, hashOf, p, 40))!
+    const block = fx.object.children[0] as Mesh
+    expect(Array.isArray(block.material)).toBe(true)
+    expect((block.material as unknown[]).length).toBe(6)
+    p.object.updateMatrixWorld(true)
+    fx.update(2)
+    expect(block.visible).toBe(false)
+    fx.update(8)
+    expect(block.visible).toBe(true)
+    // half a block above the head bone
+    const y = block.matrix.elements[13]!
+    expect(y).toBeGreaterThan(p.skel.bones.get('head')!.getWorldPosition(new Vector3()).y)
+    fx.update(20)
+    expect(block.visible).toBe(false)
+    fx.dispose()
   })
   it('no morph and no effect: undefined', async () => {
     const p = await newPlayer(hashOf)

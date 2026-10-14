@@ -47,3 +47,19 @@ describe('decodeFrames', () => {
     await expect(decodeFrames(new ArrayBuffer(8), 'image/webp')).rejects.toThrow()
   })
 })
+
+describe('vanilla stand-in images', () => {
+  it('draw 16x16 tiles in their palette (snowball round on transparent)', async () => {
+    const { vanillaImage } = await import('../../src/three/vanillaTextures')
+    const px = (c: OffscreenCanvas, x: number, y: number) => [...c.getContext('2d')!.getImageData(x, y, 1, 1).data]
+    const dirt = vanillaImage('minecraft:textures/blocks/dirt.png')!
+    expect([dirt.width, dirt.height]).toEqual([16, 16])
+    const [r, g, b, a] = px(dirt, 5, 5)
+    expect(a).toBe(255)
+    expect(r! > g! && g! > b!).toBe(true)
+    const ball = vanillaImage('minecraft:textures/items/snowball.png')!
+    expect(px(ball, 0, 0)[3]).toBe(0)
+    expect(px(ball, 8, 6)[3]).toBe(255)
+    expect(vanillaImage('nope')).toBeUndefined()
+  })
+})

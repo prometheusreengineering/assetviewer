@@ -2,7 +2,16 @@
 // at a cue's time the named effect starts at a geometry locator and then runs its own emitter lifetime.
 import { Group, Matrix4, type Object3D, type Texture } from 'three'
 import type { FnLib } from './animation/molang'
-import { Emitter, type Scheme } from './particles'
+import { Emitter, eventEffects, type Scheme } from './particles'
+
+const MAX_SUBS = 64
+const SUB_LIFE = 6
+
+/** Every effect id these schemes can start through lifetime events. */
+export function eventEffectIds(scheme: Scheme): string[] {
+  const events = scheme.particle_effect.events ?? {}
+  return Object.keys(events).flatMap((name) => eventEffects(events, name))
+}
 
 export interface ParticleCue {
   /** Animation the cue belongs to (each animation loops on its own length). */
@@ -54,8 +63,14 @@ export class EffectPlayer {
   private emitters: { cue: ParticleCue; e: Emitter }[] = []
   private last = -1
   private textures = new Set<Texture>()
+  /** Effects started by particle lifetime events (a splash where a drop lands), removed once finished. */
+  private subs: { e: Emitter; age: number }[] = []
+  private effects: Map<string, LoadedEffect>
+  private lib: FnLib
 
   constructor(cues: ParticleCue[], effects: Map<string, LoadedEffect>, locators: Map<string, Object3D>, space: Object3D, lib: FnLib = new Map()) {
+    this.effects = effects
+    this.lib = lib
     const inv = new Matrix4()
     for (const cue of cues) {
       const fx = effects.get(cue.effect)
@@ -68,6 +83,7 @@ export class EffectPlayer {
         return at ? out.copy(inv).multiply(at.matrixWorld) : out.identity()
       })
       if (fx.texture && !fx.shared) this.textures.add(fx.texture)
+      e.onEvent = this.spawnEvent
       this.object.add(e.object)
       this.emitters.push({ cue, e })
     }
@@ -100,10 +116,33 @@ export class EffectPlayer {
       }
       x.e.step(dt)
     }
+    for (const x of this.subs) {
+      x.e.step(dt)
+      x.age += dt
+    }
+    // Finished (or looping for longer than SUB_LIFE) event effects go.
+    const gone = this.subs.filter((x) => x.e.done || x.age > SUB_LIFE)
+    for (const x of gone) {
+      this.object.remove(x.e.object)
+      x.e.dispose()
+    }
+    if (gone.length) this.subs = this.subs.filter((x) => !gone.includes(x))
+  }
+
+  private spawnEvent = (id: string, x: number, y: number, z: number) => {
+    const fx = this.effects.get(id)
+    if (!fx || this.subs.length >= MAX_SUBS) return
+    const at = new Matrix4().makeTranslation(x, y, z)
+    const e = new Emitter(fx.scheme, this.lib, fx.texture, () => at)
+    // one level deep: events of event effects would cascade
+    e.setEnabled(true)
+    this.subs.push({ e, age: 0 })
+    this.object.add(e.object)
   }
 
   dispose() {
     for (const x of this.emitters) x.e.dispose()
+    for (const x of this.subs) x.e.dispose()
     for (const t of this.textures) t.dispose()
   }
 }
