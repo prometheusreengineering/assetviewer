@@ -6,7 +6,8 @@ import { decodeFrames } from '../../three/animatedImage'
 import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
-import { buildRig, finish } from '../../three/rig'
+import { addGlowLayer } from '../../three/glow'
+import { buildRig, finish, stackedFrames } from '../../three/rig'
 import { lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, LoadedModel } from '../types'
@@ -17,6 +18,8 @@ export const EVERYTHING = 'everything'
 export const OUTFIT = 'outfit'
 const HANDLE_KEY = 'assetviewer.essential.dir'
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary']
+// Essential's BedrockModel.TEXTURE_ANIMATION_FPS
+const TEXTURE_FPS = 7
 const TILE_CATEGORIES = new Set(['EMOTE', 'EFFECT', 'ICON'])
 
 let folders: EssentialFolders | undefined
@@ -94,6 +97,11 @@ async function bytes(e: EssentialEntry, path: string): Promise<ArrayBuffer> {
 const json = async <T>(e: EssentialEntry, path: string) => JSON.parse(new TextDecoder().decode(await bytes(e, path))) as T
 const optionalJson = async <T>(e: EssentialEntry, path: string | undefined) => (path ? json<T>(e, path).catch(() => undefined) : undefined)
 
+// A transparent 1x1 stand-in when the default variant has no glow but another one does.
+async function blankBitmap() {
+  return createImageBitmap(new OffscreenCanvas(1, 1))
+}
+
 interface EssentialAnimFile extends AnimFile {
   triggers?: { type?: string; name?: string }[]
 }
@@ -104,6 +112,11 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
   const textures = orderVariants(e.textures, settings)
   const decode = async (path: string) => decodeFrames(await bytes(e, path), 'image/png')
   const img = await decode(textures[0]!.path)
+  // Animated textures are frames stacked vertically (e.g. 64x1024 for a 64x64 model), played at 7 fps.
+  const d = geo['minecraft:geometry']?.[0]?.description
+  const aspect = (d?.texture_height ?? 64) / (d?.texture_width ?? 64)
+  const stacked = Math.round(img.bitmap.height / img.bitmap.width / aspect)
+  if (img.layout.count <= 1 && stacked > 1) img.layout = stackedFrames(stacked, 1000 / TEXTURE_FPS)
   // The animation the IDLE trigger plays is the resting state.
   const idle = anim?.triggers?.find((t) => t.type === 'IDLE')?.name?.split('.').pop()
   const rig = buildRig(geo, img.bitmap, img.layout, [], {
@@ -116,9 +129,33 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
     prep: (root) => (raw ? (root.scale.z *= -1) : (root.scale.x *= -1)),
   })
   const model = finish(rig)
+  // Glow layer (emissive.png), drawn full-bright over the lit model.
+  const glowOf = async (t: (typeof textures)[number]) => (t.emissive ? (await decode(t.emissive).catch(() => undefined))?.bitmap : undefined)
+  const firstGlow = await glowOf(textures[0]!)
+  const glow = textures.some((t) => t.emissive) ? addGlowLayer(rig.object, firstGlow ?? (await blankBitmap())) : undefined
+  if (glow && !firstGlow) glow.setImage(undefined)
+  glow?.sync(rig.material.map!)
   const object = new Group()
   object.add(model.object)
-  const out: LoadedModel = { ...model, object: raw ? object : fitObject(object) }
+  // Raw (on a player): the skin mask hides skin pixels under the cosmetic; dressPlayer combines the worn ones.
+  if (raw && e.skinMask?.steve) {
+    object.userData.skinMask = await bytes(e, e.skinMask.steve)
+      .then((b) => createImageBitmap(new Blob([b], { type: 'image/png' })))
+      .catch(() => undefined)
+  }
+  const out: LoadedModel = {
+    ...model,
+    tick(ms) {
+      model.tick(ms)
+      if (glow) glow.sync(rig.material.map!)
+    },
+    object: raw ? object : fitObject(object),
+    dispose() {
+      model.dispose()
+      glow?.dispose()
+      ;(object.userData.skinMask as ImageBitmap | undefined)?.close?.()
+    },
+  }
   // `state` is a getter on the finished model; keep it live.
   Object.defineProperty(out, 'state', { get: () => model.state })
   const files: DownloadFile[] = []
@@ -140,6 +177,7 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
       ;(tex.image as ImageBitmap | undefined)?.close?.()
       tex.image = next.bitmap
       tex.needsUpdate = true
+      glow?.setImage(await glowOf(t))
       out.variant = name
     }
   }

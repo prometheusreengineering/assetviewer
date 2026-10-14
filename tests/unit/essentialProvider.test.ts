@@ -46,7 +46,7 @@ describe('connected catalog', () => {
       ['emote', 1, 'Emotes & effects'],
       ['outfit', 3, 'Tools'],
     ])
-    expect(ep.stats!()).toEqual({ items: 4, files: 11, indexes: [] })
+    expect(ep.stats!()).toEqual({ items: 4, files: 13, indexes: [] })
   })
 
   it('fields and info', () => {
@@ -94,6 +94,28 @@ describe('models', () => {
     expect(meshes(m.object)).toHaveLength(3)
     expect(fetchMock).toHaveBeenCalledWith(`https://cdn.example/assets/${fx.hashes.TEST_TOP!['texture.png']}`)
     expect(m.variants).toBeUndefined()
+  })
+
+  it('stacked texture frames play at 7 fps; the glow layer follows the frame', async () => {
+    const m = await ep.loadModel(item('TEST_WINGS'))
+    expect(m.frames).toBe(4)
+    const glows: Mesh[] = []
+    m.object.traverse((o) => void (o instanceof Mesh && o.userData.glow && glows.push(o)))
+    // one glow child per cube
+    expect(glows).toHaveLength(2)
+    const base = (meshes(m.object).find((x) => !x.userData.glow)!.material as unknown as { map: Texture }).map
+    const glow = (glows[0]!.material as unknown as { map: Texture }).map
+    m.tick(1000 / 7 + 1)
+    expect(base.offset.y).toBeCloseTo(0.25)
+    expect(glow.offset.y).toBeCloseTo(0.25)
+    expect(glow.repeat.y).toBeCloseTo(0.25)
+    m.dispose()
+  })
+
+  it('raw models carry their skin mask for dressing', async () => {
+    const m = await ep.loadModel(item('TEST_WINGS'), { raw: true })
+    expect((m.object.userData.skinMask as ImageBitmap).width).toBe(64)
+    expect((await ep.loadModel(item('TEST_WINGS'))).object.userData.skinMask).toBeUndefined()
   })
 
   it('player space keeps blocks and mirrors on z', async () => {

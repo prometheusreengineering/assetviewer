@@ -69,7 +69,13 @@ const DEFS: Def[] = [
     name: 'Test Wings',
     rarity: 'EPIC',
     price: 900,
-    files: { 'geometry.steve.json': WINGS_GEO, 'texture.png': png(32, 32).map((b, i) => (i === 41 ? 2 : b)) },
+    // 4 stacked animation frames (32x128 for a 32x32 model), a glow layer and a skin mask
+    files: {
+      'geometry.steve.json': WINGS_GEO,
+      'texture.png': png(32, 128).map((b, i) => (i === 41 ? 2 : b)),
+      'emissive.png': png(32, 128).map((b, i) => (i === 41 ? 3 : b)),
+      'skin_mask.steve.png': png(64, 64).map((b, i) => (i === 41 ? 4 : b)),
+    },
   },
   {
     id: 'TEST_TOP',

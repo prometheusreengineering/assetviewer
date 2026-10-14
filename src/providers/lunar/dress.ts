@@ -175,6 +175,9 @@ export async function dressPlayer<E extends Wearable>(
   player.pose(undefined, 0)
   models.forEach((m, i) => m && attach(player, scene, m.object, entries[i]!))
   player.hideParts(models.flatMap((m) => (m?.object.userData.hideParts as string[] | undefined) ?? []))
+  // Essential skin masks: skin pixels under worn cosmetics are hidden.
+  const masks = models.map((m) => m?.object.userData.skinMask as ImageBitmap | undefined).filter((b): b is ImageBitmap => !!b)
+  if (masks.length) await player.maskSkin(masks).catch((err) => console.warn('skin mask', err))
   // A fixed frame (not fitObject) so the player keeps its size as items change (room above for hats),
   // turned to face the camera (models face +z, the camera looks from -z).
   const object = new Group()

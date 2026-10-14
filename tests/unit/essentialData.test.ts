@@ -81,12 +81,16 @@ describe('catalog', () => {
     expect(hat).toMatchObject({ geometry: 'geometry.steve.json', animations: 'animations.json', settings: 'settings.json' })
     // no name: the id, humanized
     expect(c.entries.find((e) => e.item.id === 'TEST_TOP')!.item.name).toBe('Test Top')
-    expect(c.files).toBe(5 + 2 + 2 + 2)
+    expect(c.files).toBe(5 + 4 + 2 + 2)
+    const wings = c.entries.find((e) => e.item.id === 'TEST_WINGS')!
+    expect(wings.textures).toEqual([{ name: 'default', path: 'texture.png', emissive: 'emissive.png' }])
+    expect(wings.skinMask).toEqual({ steve: 'skin_mask.steve.png', alex: undefined })
+    expect(wings.item.fields.glow).toBe(true)
   })
 
   it('textures: the plain texture first, else the colour variants', async () => {
     const c = await build()
-    expect(c.entries.find((e) => e.item.id === 'TEST_WINGS')!.textures).toEqual([{ name: 'default', path: 'texture.png' }])
+    expect(c.entries.find((e) => e.item.id === 'TEST_WINGS')!.textures.map((t) => t.name)).toEqual(['default'])
     expect(c.entries.find((e) => e.item.id === 'TEST_HAT')!.textures.map((t) => t.name)).toEqual(['blue', 'red'])
   })
 

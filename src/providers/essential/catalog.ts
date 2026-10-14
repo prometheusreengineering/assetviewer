@@ -25,8 +25,12 @@ export interface EssentialEntry {
   item: CosmeticItem
   files: Map<string, AssetRef>
   geometry?: string
-  /** Colour variants (`variants/<name>/texture.png`), or the plain `texture.png` as `default`. */
-  textures: { name: string; path: string }[]
+  /** Colour variants (`variants/<name>/texture.png`), or the plain `texture.png` as `default`; `emissive` is the glow layer drawn full-bright over it. */
+  textures: { name: string; path: string; emissive?: string }[]
+  /** Skin masks (64x64, black = hide that skin pixel under the cosmetic) for wide and slim skins. */
+  skinMask?: { steve?: string; alex?: string }
+  /** Slim-arm (Alex) geometry, when the cosmetic has one. */
+  geometryAlex?: string
   animations?: string
   settings?: string
 }
@@ -88,9 +92,11 @@ export function buildEssentialCatalog(dumps: unknown[]): EssentialCatalog {
     const variants = [...files.keys()]
       .map((p) => /^variants\/([^/]+)\/texture\.png$/.exec(p))
       .filter((m): m is RegExpExecArray => !!m)
-      .map((m) => ({ name: m[1]!, path: m[0] }))
+      .map((m) => ({ name: m[1]!, path: m[0], emissive: files.has(`variants/${m[1]}/emissive.png`) ? `variants/${m[1]}/emissive.png` : files.has('emissive.png') ? 'emissive.png' : undefined }))
       .sort((x, y) => x.name.localeCompare(y.name))
-    const textures = files.has('texture.png') ? [{ name: 'default', path: 'texture.png' }, ...variants] : variants
+    const plain = { name: 'default', path: 'texture.png', emissive: files.has('emissive.png') ? 'emissive.png' : undefined }
+    const textures = files.has('texture.png') ? [plain, ...variants] : variants
+    for (const t of textures) if (!t.emissive) delete t.emissive
     const geometry = files.has('geometry.steve.json') ? 'geometry.steve.json' : undefined
     const tags = d.h ?? []
     const tile = TILE.has(d.b) || !geometry || !textures.length
@@ -114,7 +120,10 @@ export function buildEssentialCatalog(dumps: unknown[]): EssentialCatalog {
       },
     }
     if (typeof d.o === 'number') item.fields.price = d.o
-    entries.push({ item, files, geometry, textures, animations: files.has('animations.json') ? 'animations.json' : undefined, settings: files.has('settings.json') ? 'settings.json' : undefined })
+    const mask = (m: 'steve' | 'alex') => (files.has(`skin_mask.${m}.png`) ? `skin_mask.${m}.png` : undefined)
+    const skinMask = mask('steve') || mask('alex') ? { steve: mask('steve'), alex: mask('alex') } : undefined
+    if (files.has('emissive.png') || variants.some((v) => v.emissive)) item.fields.glow = true
+    entries.push({ item, files, geometry, geometryAlex: files.has('geometry.alex.json') ? 'geometry.alex.json' : undefined, skinMask, textures, animations: files.has('animations.json') ? 'animations.json' : undefined, settings: files.has('settings.json') ? 'settings.json' : undefined })
   }
   entries.sort((x, y) => x.item.name.localeCompare(y.item.name, 'en', { numeric: true }))
   return { entries, files: fileCount }
