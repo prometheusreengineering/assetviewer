@@ -1,7 +1,14 @@
 <script setup lang="ts">
+import Button from 'primevue/button'
 import type { CosmeticProvider } from '../providers/types'
 
-defineProps<{ provider: CosmeticProvider }>()
+const props = defineProps<{ provider: CosmeticProvider }>()
+const emit = defineEmits<{ disconnected: [] }>()
+// Providers fed by the viewer's own files (Essential) can be disconnected here.
+async function disconnect() {
+  await props.provider.setup?.disconnect?.()
+  emit('disconnected')
+}
 </script>
 
 <template>
@@ -11,6 +18,11 @@ defineProps<{ provider: CosmeticProvider }>()
       <p class="lead">
         An unofficial viewer for {{ provider.name }} cosmetics. Browse every hat, cloak, wing, pet and resource on the
         public asset CDN, preview them in 3D, try them on a player with your own skin, and download the source files.
+      </p>
+
+      <p v-if="provider.setup?.disconnect" class="connected">
+        Showing {{ provider.name }} cosmetics from your own files.
+        <Button label="Disconnect" icon="pi pi-sign-out" size="small" severity="secondary" title="Forget the folders (and any copy kept in this browser)" @click="disconnect" />
       </p>
 
       <h2>About</h2>
@@ -44,4 +56,5 @@ h2 { font-size: 1.05rem; margin: 2rem 0 0.4rem; }
 p, ul { margin: 0; opacity: 0.85; }
 ul { padding-left: 1.2rem; }
 a { color: var(--p-primary-color); }
+.connected { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; }
 </style>

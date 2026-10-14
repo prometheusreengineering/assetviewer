@@ -355,7 +355,7 @@ const menuModel = computed(() => {
       <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
       <EssentialSetup v-else-if="needsSetup" @connected="reloadKey++" />
       <template v-else>
-      <HomeView v-if="isHome" :provider="provider" />
+      <HomeView v-if="isHome" :provider="provider" @disconnected="reloadKey++" />
       <OutfitBuilder v-else-if="isOutfit" :provider="provider" />
       <template v-else>
       <div v-if="collection" class="collbar">

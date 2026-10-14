@@ -19,7 +19,7 @@ import { buildEssentialCatalog, categoryId, ESSENTIAL_CATEGORIES, orderVariants,
 import { boneSide, defaultSide, hiddenBones, sidesOf } from './rules'
 import { buildEmote, emoteSequence, type EssentialEmoteFile } from './emote'
 import type { SoundDefinitions } from './sounds'
-import { assetBytes, filesSource, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
+import { assetBytes, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
 
 export const EVERYTHING = 'everything'
 export const OUTFIT = 'outfit'
@@ -35,7 +35,7 @@ let catalog: EssentialCatalog | undefined
 let byId = new Map<string, EssentialEntry>()
 
 /** Connection state for the setup panel. */
-export const essentialState = ref<{ connected: boolean; storedHandle: boolean; items: number; files: number; error?: string }>({ connected: false, storedHandle: false, items: 0, files: 0 })
+export const essentialState = ref<{ connected: boolean; storedHandle: boolean; remembered?: boolean; items: number; files: number; error?: string }>({ connected: false, storedHandle: false, items: 0, files: 0 })
 
 /** Reads the dumps of `f` and makes them the catalog. */
 export async function connect(f: Partial<EssentialFolders>): Promise<void> {
@@ -82,13 +82,53 @@ export async function reconnect(ask: boolean): Promise<boolean> {
 }
 
 /** `<input webkitdirectory>` fallback: the dumps folder and (optionally) Essential's cosmetic-cache folder. */
-export async function connectFiles(dumps: Iterable<File>, cache?: Iterable<File>): Promise<void> {
-  await connect({ dumps: filesSource(dumps), cache: cache ? filesSource(cache) : undefined })
+const COPY_KEY = 'assetviewer.essential.files'
+interface StoredFile {
+  path: string
+  file: Blob
+}
+/** Picked files with their path inside the picked folder (stored files lose `webkitRelativePath`). */
+const entries = (files: Iterable<File>): StoredFile[] => [...files].map((f) => ({ path: (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name, file: f }))
+function entrySource(list: StoredFile[]) {
+  const map = new Map(list.map((e) => [e.path, e.file]))
+  return listingSource([...map.keys()], async (p) => map.get(p)?.arrayBuffer())
+}
+
+/**
+ * `<input webkitdirectory>` fallback: the dumps folder and (optionally) Essential's cosmetic-cache folder.
+ * `remember` keeps a copy in this browser's IndexedDB (local only) so the next visit connects by itself.
+ */
+export async function connectFiles(dumps: Iterable<File>, cache?: Iterable<File>, remember = false): Promise<void> {
+  const d = entries(dumps)
+  const c = cache ? entries(cache) : []
+  await connect({ dumps: entrySource(d), cache: c.length ? entrySource(c) : undefined })
+  if (!remember) return
+  try {
+    await set(COPY_KEY, { dumps: d, cache: c })
+    essentialState.value = { ...essentialState.value, remembered: true }
+  } catch (err) {
+    essentialState.value = { ...essentialState.value, error: `Could not keep a copy: ${err}` }
+  }
+}
+
+/** Connects the copy kept by `connectFiles(..., remember)`, if any. */
+async function restoreCopy(): Promise<boolean> {
+  let stored: { dumps?: StoredFile[]; cache?: StoredFile[] } | undefined
+  try {
+    stored = await get(COPY_KEY)
+  } catch {
+    return false
+  }
+  if (!stored?.dumps?.length) return false
+  await connect({ dumps: entrySource(stored.dumps), cache: stored.cache?.length ? entrySource(stored.cache) : undefined })
+  essentialState.value = { ...essentialState.value, remembered: true }
+  return true
 }
 
 export async function forget(): Promise<void> {
   try {
     await del(HANDLE_KEY)
+    await del(COPY_KEY)
   } catch {}
   folders = undefined
   catalog = undefined
@@ -190,8 +230,9 @@ async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise
   if (img.layout.count <= 1 && stacked > 1) img.layout = stackedFrames(stacked, 1000 / TEXTURE_FPS)
   // The animation the IDLE trigger plays is the resting state.
   const idle = anim?.triggers?.find((t) => t.type === 'IDLE')?.name?.split('.').pop()
+  const normalized = anim ? normalizeAnims(anim) : undefined
   const rig = buildRig(geo, img.bitmap, img.layout, [], {
-    animFile: anim ? normalizeAnims(anim) : undefined,
+    animFile: normalized,
     lib: new Map(),
     preferred: [...(idle ? [idle] : []), 'idle'],
     raw: true,
@@ -268,6 +309,8 @@ async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise
   }
   // `state` is a getter on the finished model; keep it live.
   Object.defineProperty(out, 'state', { get: () => model.state })
+  // The animation menu offers what moves the model; particle-only animations ("emitter") run from their triggers.
+  out.states = model.states.filter((s) => Object.keys(normalized?.animations[s]?.bones ?? {}).length > 0)
   const files: DownloadFile[] = []
   for (const p of [e.geometry, textures[0]!.path, e.animations, e.settings]) {
     if (!p) continue
@@ -309,12 +352,12 @@ export const essentialProvider: CosmeticProvider = {
   name: 'Essential',
   available: true,
   about: { host: 'your own Essential files (nothing is hosted here)', owner: 'Essential or ModCore' },
-  setup: { needed: () => !catalog },
+  setup: { needed: () => !catalog, disconnect: forget },
 
   async load() {
     if (catalog) return
     try {
-      await reconnect(false)
+      if (!(await reconnect(false))) await restoreCopy()
     } catch (err) {
       essentialState.value = { ...essentialState.value, error: String(err) }
     }

@@ -45,6 +45,8 @@ const tlTime = ref(0)
 const playing = ref(true)
 const isEmote = computed(() => shown.value?.category === 'emotes' || shown.value?.category === 'emote')
 const hasSound = ref(false)
+// Animation names as people read them: idle_special_1 -> Idle special 1
+const stateOptions = computed(() => states.value.map((s) => ({ value: s, label: (s.charAt(0).toUpperCase() + s.slice(1)).replace(/[_.]+/g, ' ') })))
 // Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
 const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
 // Second row: animation, show-on-player (+ what it reveals), or an emote's skin and play controls.
@@ -326,7 +328,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
           <label title="On: rotate to any angle. Off: stays upright (vertical angle limited)."><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
         </div>
         <div v-if="hasRow2" class="row">
-          <Select v-if="states.some((s) => s !== 'idle' && s !== 'main')" v-model="state" :options="states" size="small" placeholder="Animation" />
+          <Select v-if="states.some((s) => s !== 'idle' && s !== 'main')" v-model="state" :options="stateOptions" option-label="label" option-value="value" size="small" placeholder="Animation" />
           <Select v-if="variants.length > 1" v-model="variant" :options="variants" size="small" placeholder="Colour" title="Colour variant" class="variant" />
           <Select v-if="sides.length > 1" v-model="side" :options="sides" size="small" placeholder="Side" title="Side it is worn on" class="side" />
           <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>

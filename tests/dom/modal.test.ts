@@ -86,7 +86,7 @@ describe('CosmeticModal', () => {
     p2.loadModel = vi.fn(async () => model)
     await open(ITEMS[0], p2)
     expect($$('.actions .p-select')).toHaveLength(1)
-    expect($('.actions .p-select')!.textContent).toContain('idle')
+    expect($('.actions .p-select')!.textContent).toContain('Idle')
   })
 
   it('emotes get play/pause and a scrubber driving the timeline', async () => {

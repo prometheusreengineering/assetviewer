@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
 import { ref, watch } from 'vue'
 import { connectFiles, essentialState, pickFolder, reconnect } from '../providers/essential'
@@ -31,7 +32,8 @@ async function run(fn: () => Promise<unknown>) {
 }
 const pick = () => run(pickFolder)
 const again = () => run(async () => (await reconnect(true)) || Promise.reject(new Error('Permission to read the folder was not given.')))
-const useFiles = () => run(() => connectFiles(dumpsFiles.value, cacheFiles.value.length ? cacheFiles.value : undefined))
+const remember = ref(false)
+const useFiles = () => run(() => connectFiles(dumpsFiles.value, cacheFiles.value.length ? cacheFiles.value : undefined, remember.value))
 const files = (e: Event) => [...((e.target as HTMLInputElement).files ?? [])]
 const dumpsInput = ref<HTMLInputElement>()
 const cacheInput = ref<HTMLInputElement>()
@@ -87,7 +89,12 @@ async function copy(path: string) {
           <input ref="cacheInput" type="file" webkitdirectory multiple hidden @change="(e) => (cacheFiles = files(e))" />
         </li>
       </ol>
-      <Button label="Show my cosmetics" icon="pi pi-check" :disabled="!dumpsFiles.length" :loading="busy" @click="useFiles" />
+      <div class="go">
+        <Button label="Show my cosmetics" icon="pi pi-check" :disabled="!dumpsFiles.length" :loading="busy" @click="useFiles" />
+        <label class="remember" title="Keeps a copy of the chosen files in this browser's own storage (on this device only), so next time it opens by itself. Disconnect on the Essential home page removes it.">
+          <Checkbox v-model="remember" binary /> Remember on this device
+        </label>
+      </div>
       <p class="hint">
         Tip: paste the path into the folder dialog's address bar. Your browser may ask whether to "upload" the files: that
         only lets this page read them, nothing leaves your computer. Files missing from the cache are downloaded from the
@@ -115,6 +122,8 @@ h1 { margin: 0 0 0.75rem; font-size: 1.8rem; }
 .picked { color: var(--p-primary-color); gap: 0.35rem; }
 .path { font-size: 0.85rem; opacity: 0.8; user-select: all; }
 .hint { font-size: 0.9rem; opacity: 0.7; margin-top: 1rem; }
+.go { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.remember { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; }
 .msg { margin: 1rem 0; }
 .fallback { margin-top: 1.5rem; border: 1px solid var(--av-border); border-radius: 8px; padding: 0.75rem 1rem; }
 .fallback summary { cursor: pointer; }
