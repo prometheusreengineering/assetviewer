@@ -39,6 +39,8 @@ export interface Rig {
   object: LoadedModel['object']
   material: MeshLambertMaterial
   bones?: Map<string, Bone>
+  /** Geometry locators (particle attachment points) by name. */
+  locators?: Map<string, Object3D>
   player?: AnimationPlayer
   layout: FrameLayout
   /** Texture rows run bottom-up (flipY textures, e.g. OBJ hats): frame 0 is the top row in texture space. */
@@ -107,11 +109,11 @@ export interface RigOptions {
 export function buildRig(geo: GeoFile, bitmap: ImageBitmap, layout: FrameLayout, files: DownloadFile[], o: RigOptions = {}): Rig {
   const tex = createTexture(bitmap)
   const material = createMaterial(tex)
-  const { root, bones } = buildGeoRig(geo, material, o.flipU)
+  const { root, bones, locators } = buildGeoRig(geo, material, o.flipU)
   o.prep?.(root)
   const player = o.animFile && o.lib ? new AnimationPlayer(bones, o.animFile, o.lib, o.preferred) : undefined
   // Fit the first frame of the default animation (parts it hides don't count), not the static model.
   player?.tick(0)
   const object = o.raw ? root : fitObject(root)
-  return { object, material, bones, player, layout, files }
+  return { object, material, bones, locators, player, layout, files }
 }

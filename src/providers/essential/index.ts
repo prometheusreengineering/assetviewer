@@ -1,12 +1,16 @@
 import { del, get, set } from 'idb-keyval'
-import { Group } from 'three'
+import { Box3, Group, Vector3 } from 'three'
 import { ref } from 'vue'
 import { getUrlBuffer } from '../../cdn'
 import { decodeFrames } from '../../three/animatedImage'
 import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
+import { EffectPlayer, particleCues, type LoadedEffect } from '../../three/effects'
 import { addGlowLayer } from '../../three/glow'
+import { createTexture } from '../../three/geoModel'
+import type { Scheme } from '../../three/particles'
+import type { Texture } from 'three'
 import { buildRig, finish, stackedFrames } from '../../three/rig'
 import { lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
@@ -21,7 +25,7 @@ const HANDLE_KEY = 'assetviewer.essential.dir'
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary']
 // Essential's BedrockModel.TEXTURE_ANIMATION_FPS
 const TEXTURE_FPS = 7
-const TILE_CATEGORIES = new Set(['EMOTE', 'EFFECT', 'ICON'])
+const TILE_CATEGORIES = new Set(['EMOTE', 'ICON'])
 
 let folders: EssentialFolders | undefined
 let catalog: EssentialCatalog | undefined
@@ -103,6 +107,40 @@ async function blankBitmap() {
   return createImageBitmap(new OffscreenCanvas(1, 1))
 }
 
+/**
+ * The cosmetic's particle effects by identifier. A texture naming one of its own files (`boop.texture`, a full
+ * `cosmetics/.../texture` path) is that file; anything else, even vanilla paths like
+ * `textures/particle/particles` or `textures/blocks/wool_colored_white`, is the cosmetic's own texture: their
+ * UVs are laid out on it (a cape's flame sprite sits in its spare corner).
+ */
+async function loadEffects(e: EssentialEntry, wanted: Set<string>, own: Texture): Promise<Map<string, LoadedEffect>> {
+  const out = new Map<string, LoadedEffect>()
+  for (const path of e.files.keys()) {
+    if (!path.endsWith('.particle.json') || out.size >= wanted.size) continue
+    const scheme = await json<Scheme>(e, path).catch(() => undefined)
+    const id = scheme?.particle_effect?.description?.identifier
+    if (!scheme || !id || !wanted.has(id) || out.has(id)) continue
+    const ref = scheme.particle_effect.description.basic_render_parameters?.texture ?? ''
+    const file = await effectTexture(e, ref)
+    out.set(id, file ? { scheme, texture: file } : { scheme, texture: own, shared: true })
+  }
+  return out
+}
+
+async function effectTexture(e: EssentialEntry, ref: string) {
+  const own = [...e.files.keys()].find((p) => {
+    if (!p.endsWith('.png')) return false
+    const bare = p.slice(0, -4)
+    return p === ref || bare === ref || ref.endsWith('/' + bare) || bare.endsWith('/' + ref)
+  })
+  if (!own) return undefined
+  try {
+    return createTexture((await decodeFrames(await bytes(e, own), 'image/png')).bitmap)
+  } catch {
+    return undefined
+  }
+}
+
 interface EssentialAnimFile extends AnimFile {
   triggers?: { type?: string; name?: string }[]
 }
@@ -164,16 +202,38 @@ async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise
     }
     object.userData.essential = { id: e.item.id, settings, bones: rig.bones }
   }
+  // Effects without any model (particles only) are framed like a player wearing them, plus their locators.
+  let meshes = 0
+  object.traverse((o) => void ((o as { isMesh?: boolean }).isMesh && meshes++))
+  let frame: Box3 | undefined
+  if (!raw && !meshes) {
+    object.updateMatrixWorld(true)
+    frame = new Box3(new Vector3(-0.6, 0, -0.6), new Vector3(0.6, 2, 0.6))
+    for (const l of rig.locators?.values() ?? []) frame.expandByPoint(l.getWorldPosition(new Vector3()))
+  }
+  const fitted = raw ? object : fitObject(object, 1.6, frame)
+  // Particle effects the resting animations cue (IDLE/TICK triggers), at their geometry locators.
+  const playing = (anim?.triggers ?? []).filter((t) => t.type === 'IDLE' || t.type === 'TICK').map((t) => t.name ?? '')
+  const cues = anim ? particleCues(anim, playing.filter(Boolean)) : []
+  let effects: EffectPlayer | undefined
+  if (cues.length) {
+    const fx = await loadEffects(e, new Set(cues.map((c) => c.effect)), rig.material.map!).catch(() => new Map<string, LoadedEffect>())
+    effects = new EffectPlayer(cues, fx, rig.locators ?? new Map(), object)
+    if (effects.count) object.add(effects.object)
+    else effects = undefined
+  }
   const out: LoadedModel = {
     ...model,
     tick(ms) {
       model.tick(ms)
       if (glow) glow.sync(rig.material.map!)
+      effects?.tick(ms)
     },
-    object: raw ? object : fitObject(object),
+    object: fitted,
     dispose() {
       model.dispose()
       glow?.dispose()
+      effects?.dispose()
       ;(object.userData.skinMask as ImageBitmap | undefined)?.close?.()
     },
   }
@@ -339,5 +399,5 @@ export const essentialProvider: CosmeticProvider = {
 
 // Dev only: headless checks can't click a folder picker, so they connect a source directly.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  ;(window as unknown as Record<string, unknown>).__essential = { connect, resolveFolders, listingSource, subSource }
+  ;(window as unknown as Record<string, unknown>).__essential = { connect, resolveFolders, listingSource, subSource, provider: essentialProvider }
 }

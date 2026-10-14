@@ -34,6 +34,8 @@ export interface GeoBone {
   rotation?: [number, number, number]
   mirror?: boolean
   cubes?: GeoCube[]
+  /** Named points (model space, like pivots) that particle effects attach to. */
+  locators?: Record<string, [number, number, number] | { offset?: [number, number, number]; rotation?: [number, number, number] }>
 }
 export interface GeoFile {
   'minecraft:geometry': {
@@ -169,7 +171,7 @@ export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Obje
  * artwork ends up the right way round again. Without it, strips whose art continues across a hinge (butterfly
  * wings) showed every strip flipped in place and the wing fell apart into gaps.
  */
-export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU = false): { root: Object3D; bones: Map<string, Bone> } {
+export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU = false): { root: Object3D; bones: Map<string, Bone>; locators: Map<string, Object3D> } {
   const g = geo['minecraft:geometry'][0]
   const texW = g.description.texture_width ?? 16
   const texH = g.description.texture_height ?? 16
@@ -184,6 +186,7 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU =
   }
 
   let cubeIndex = 0
+  const locators = new Map<string, Object3D>()
   const root = new Group()
   const bones = new Map<string, Bone>()
   for (const bone of g.bones ?? []) {
@@ -201,6 +204,18 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU =
     if (!bone.parent || !groups.has(bone.parent)) root.add(group)
     // Some models parent bones to one they don't define (e.g. a sword under "armorRightArm"); keep the name for dressing.
     if (bone.parent && !groups.has(bone.parent)) group.userData.missingParent = bone.parent
+
+    // Locators follow their bone (and its animation); effects read their world matrix.
+    for (const [name, l] of Object.entries(bone.locators ?? {})) {
+      const at = Array.isArray(l) ? l : l?.offset
+      if (!at) continue
+      const loc = new Object3D()
+      loc.name = name
+      loc.position.set(at[0] - pivot[0], at[1] - pivot[1], at[2] - pivot[2])
+      if (!Array.isArray(l) && l.rotation) loc.rotation.copy(rotationOf(l.rotation))
+      group.add(loc)
+      locators.set(name, loc)
+    }
 
     for (const cube of bone.cubes ?? []) {
       const mesh = buildCube(cube.mirror === undefined && bone.mirror ? { ...cube, mirror: true } : cube, texW, texH, material, cubeIndex++, flipU)
@@ -224,5 +239,5 @@ export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU =
     }
   }
   root.scale.setScalar(1 / 16)
-  return { root, bones }
+  return { root, bones, locators }
 }

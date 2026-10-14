@@ -62,8 +62,8 @@ export const ESSENTIAL_CATEGORIES: Record<string, [string, string]> = {
   EMOTE: ['Emotes', 'pi-video'],
   ICON: ['Icons', 'pi-image'],
 }
-/** Shown as a name tile: emotes animate the player (not supported yet), effects are mostly particles. */
-const TILE = new Set(['EMOTE', 'ICON', 'EFFECT'])
+/** Shown as a name tile: emotes play on the player, icons have no model. */
+const TILE = new Set(['EMOTE', 'ICON'])
 
 export const categoryId = (b: string) => b.toLowerCase()
 

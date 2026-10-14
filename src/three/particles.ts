@@ -30,6 +30,11 @@ export const num = (e: unknown, lib: FnLib, d = 0): Compiled =>
   typeof e === 'number' ? () => e : typeof e === 'string' && e.trim() !== '' ? compile(e, lib) : typeof e === 'boolean' ? () => (e ? 1 : 0) : () => d
 type Vec = (s: Scope) => number[]
 export const vec = (e: unknown, lib: FnLib, n: number, d: number[]): Vec => {
+  // Essential writes vectors as { first, second, third }.
+  if (e && typeof e === 'object' && !Array.isArray(e) && 'first' in e) {
+    const o = e as { first?: unknown; second?: unknown; third?: unknown }
+    e = [o.first, o.second, o.third].slice(0, n)
+  }
   if (!Array.isArray(e)) {
     const one = e === undefined ? undefined : num(e, lib)
     return one ? (s) => Array(n).fill(one(s)) : () => d

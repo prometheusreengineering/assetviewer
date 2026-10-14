@@ -89,10 +89,11 @@ class Parser {
     return t
   }
 
-  program(): Compiled {
+  /** Statements up to the end, or (in a `{ }` block) up to its closing brace. */
+  program(inBlock = false): Compiled {
     const stmts: Compiled[] = []
     let returned = false
-    while (this.i < this.toks.length) {
+    while (this.i < this.toks.length && !(inBlock && this.peek()?.v === '}')) {
       if (this.eat(';')) continue
       const t = this.peek()!
       if (t.t === 'id' && t.v === 'return') {
@@ -102,7 +103,7 @@ class Parser {
         break
       }
       stmts.push(this.expr())
-      if (!this.eat(';') && this.i < this.toks.length) {
+      if (!this.eat(';') && this.i < this.toks.length && !(inBlock && this.peek()?.v === '}')) {
         this.i++ // skip stray token to guarantee progress
       }
     }
@@ -247,7 +248,7 @@ class Parser {
     }
     if (t.v === '{') {
       // block: evaluate statements, value of the last one
-      const inner = this.program()
+      const inner = this.program(true)
       this.eat('}')
       return inner
     }
