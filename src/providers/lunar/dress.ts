@@ -2,6 +2,7 @@ import { Box3, Group, Matrix4, Vector3, type Object3D } from 'three'
 import type { Player } from '../../three/player'
 import type { CosmeticItem, DownloadFile, LoadedModel } from '../types'
 import type { EmoteDef, EmotesJson } from './catalog'
+import { skinIsSlim } from '../../skin'
 import { emoteEffects, emoteTimeline, findAction, newPlayer } from './emotes'
 
 type HashOf = (rel: string) => string
@@ -163,11 +164,12 @@ export async function dressPlayer<E extends Wearable>(
   emote: EmoteDef | undefined,
   data: EmotesJson | undefined,
   hashOf: HashOf,
-  loadRaw: (e: E) => Promise<LoadedModel>,
+  loadRaw: (e: E, slim: boolean) => Promise<LoadedModel>,
 ): Promise<LoadedModel> {
   const [player, models, found] = await Promise.all([
     newPlayer(hashOf),
-    Promise.all(entries.map((e) => loadRaw(e).catch((err) => (console.warn(e.item.name, err), undefined)))),
+    // Cosmetics with slim-arm models wear those on a slim-skinned player.
+    skinIsSlim().then((slim) => Promise.all(entries.map((e) => loadRaw(e, slim).catch((err) => (console.warn(e.item.name, err), undefined))))),
     emote && data ? findAction('emote_' + emote.name, data, hashOf) : undefined,
   ])
   const scene = new Group()

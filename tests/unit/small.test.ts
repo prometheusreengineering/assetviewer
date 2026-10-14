@@ -89,3 +89,15 @@ describe('config and providers', () => {
     await expect(p.loadModel(it1)).rejects.toThrow(/Unknown item/)
   })
 })
+
+describe('gekModelPath', () => {
+  it('picks the slim geometry for a slim player, the default otherwise', async () => {
+    const { gekModelPath } = await import('../../src/providers/lunar')
+    const model = { 'a.geo.json': '!query.is_slim', 'b.geo.json': 'query.is_slim' }
+    expect(gekModelPath(model, false)).toBe('a.geo.json')
+    expect(gekModelPath(model, true)).toBe('b.geo.json')
+    expect(gekModelPath({ 'only.geo.json': '1' }, true)).toBe('only.geo.json')
+    expect(gekModelPath('plain.geo.json', true)).toBe('plain.geo.json')
+    expect(gekModelPath(undefined, false)).toBeUndefined()
+  })
+})

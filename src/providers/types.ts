@@ -106,7 +106,8 @@ export interface CosmeticProvider {
   /** Frame layout (px) for stacked-frame images, if the item is animated. */
   imageFrames?(item: CosmeticItem): Promise<{ frameW?: number; frameH?: number; frametimeMs: number } | undefined>
   /** `raw` keeps player-space coordinates (unfitted) for dressing a player. */
-  loadModel(item: CosmeticItem, opts?: { raw?: boolean }): Promise<LoadedModel>
+  /** `slim` picks slim-arm (Alex) models where a cosmetic has them (worn by a slim-skinned player). */
+  loadModel(item: CosmeticItem, opts?: { raw?: boolean; slim?: boolean }): Promise<LoadedModel>
   /** A player wearing `items`, optionally playing an emote item. */
   dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem): Promise<LoadedModel>
   /** The item's source files (model, textures, animations, metadata), for bulk export. */

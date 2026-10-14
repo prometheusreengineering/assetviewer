@@ -47,6 +47,29 @@ function placeholder(): OffscreenCanvas {
   return c
 }
 
+/**
+ * Slim (Alex) skins have 3 px arms, which leaves the 4th column of the right arm's front and back unused
+ * (x 54-55, y 20-31 in the 64x64 layout): transparent there means slim.
+ */
+export function isSlimSkin(bitmap: ImageBitmap): boolean {
+  if (bitmap.width !== 64 || bitmap.height < 64) return false
+  try {
+    const g = new OffscreenCanvas(64, 64).getContext('2d', { willReadFrequently: true })
+    if (!g || typeof g.getImageData !== 'function') return false
+    g.drawImage(bitmap, 0, 0)
+    const d = g.getImageData(54, 20, 2, 12).data
+    for (let i = 3; i < d.length; i += 4) if (d[i]! > 0) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether the current player skin is slim (cached with the skin). */
+export async function skinIsSlim(name = skinName.value.trim()): Promise<boolean> {
+  return isSlimSkin(await skinBitmap(name))
+}
+
 const cache = new Map<string, Promise<ImageBitmap>>()
 
 /** The skin bitmap for `name` (placeholder if empty or the lookup fails); legacy 64x32 skins are expanded. */

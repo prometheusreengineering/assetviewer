@@ -6,7 +6,7 @@ import { Emitter, type Scheme } from '../../three/particles'
 import type { FnLib } from '../../three/animation/molang'
 import { Euler, Group, Matrix4, Quaternion, Vector3, type Texture } from 'three'
 import { createPlayer, type Player } from '../../three/player'
-import { skinBitmap } from '../../skin'
+import { isSlimSkin, skinBitmap } from '../../skin'
 import type { DownloadFile, LoadedModel, Timeline } from '../types'
 import type { EmoteDef, EmotesJson } from './catalog'
 
@@ -36,9 +36,20 @@ export function playerBody(hashOf: HashOf): Promise<BobjFile> {
   return parsedFile(BODY, hashOf)
 }
 
+export const SLIM_BODY = 'emotes/models/entity/slim.bobj'
+
+/** The player in the current skin: the slim (Alex) body for slim skins (same armature), else the wide one. */
 export async function newPlayer(hashOf: HashOf): Promise<Player> {
-  const [body, skin] = await Promise.all([playerBody(hashOf), skinBitmap()])
-  return createPlayer(body, skin)
+  const skin = await skinBitmap()
+  let body: BobjFile | undefined
+  if (isSlimSkin(skin)) {
+    try {
+      body = await parsedFile(SLIM_BODY, hashOf)
+    } catch {
+      body = undefined
+    }
+  }
+  return createPlayer(body ?? (await playerBody(hashOf)), skin)
 }
 
 // Actions live in several files (one is 16 MB); each is scanned once for its action names and

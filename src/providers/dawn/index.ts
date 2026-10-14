@@ -185,7 +185,7 @@ export const dawnProvider: CosmeticProvider = {
     // The player body and skin are Lunar's (its CDN has the emote armature).
     const hashOf = await lunarHashOf()
     const entries = items.map((it) => byId.get(it.id)).filter((e): e is DawnEntry => !!e && e.item.render === '3d')
-    return dressPlayer(entries, undefined, undefined, hashOf, (e) => dawnProvider.loadModel(e.item, { raw: true }))
+    return dressPlayer(entries, undefined, undefined, hashOf, (e, slim) => dawnProvider.loadModel(e.item, { raw: true, slim }))
   },
 
   imageUrl: (item) => blobUrl(byId.get(item.id)!.path),

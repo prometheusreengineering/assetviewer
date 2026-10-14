@@ -107,9 +107,12 @@ interface EssentialAnimFile extends AnimFile {
   triggers?: { type?: string; name?: string }[]
 }
 
-async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> {
+async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise<LoadedModel> {
   if (!e.geometry || !e.textures.length) throw new Error(`${e.item.name} has no 3D model`)
-  const [geo, anim, settings] = await Promise.all([json<GeoFile>(e, e.geometry), optionalJson<EssentialAnimFile>(e, e.animations), optionalJson<unknown>(e, e.settings)])
+  // On a slim (Alex) player, the slim-arm geometry and skin masks.
+  const alex = raw && slim
+  const geoPath = alex && e.geometryAlex ? e.geometryAlex : e.geometry
+  const [geo, anim, settings] = await Promise.all([json<GeoFile>(e, geoPath), optionalJson<EssentialAnimFile>(e, e.animations), optionalJson<unknown>(e, e.settings)])
   const textures = orderVariants(e.textures, settings)
   const decode = async (path: string) => decodeFrames(await bytes(e, path), 'image/png')
   const img = await decode(textures[0]!.path)
@@ -151,8 +154,9 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
   // Raw (on a player): the skin mask hides skin pixels under the cosmetic (per side when it has sides);
   // dressPlayer combines the worn ones and applies the settings' hiding rules through the bones.
   if (raw) {
-    const sideMask = side && e.files.has(`skin_mask.steve.${side}.png`) ? `skin_mask.steve.${side}.png` : undefined
-    const maskPath = sideMask ?? e.skinMask?.steve
+    const model = alex && (e.skinMask?.alex || e.files.has(`skin_mask.alex.${side}.png`)) ? 'alex' : 'steve'
+    const sideMask = side && e.files.has(`skin_mask.${model}.${side}.png`) ? `skin_mask.${model}.${side}.png` : undefined
+    const maskPath = sideMask ?? e.skinMask?.[model]
     if (maskPath) {
       object.userData.skinMask = await bytes(e, maskPath)
         .then((b) => createImageBitmap(new Blob([b], { type: 'image/png' })))
@@ -270,8 +274,8 @@ export const essentialProvider: CosmeticProvider = {
     const hashOf = await lunarHashOf()
     const worn = items.map((it) => byId.get(it.id)).filter((e): e is EssentialEntry => !!e && !e.item.thumb).map((e) => ({ kind: 'essential', item: e.item }))
     const loaded: LoadedModel[] = []
-    const dressed = await dressPlayer(worn, undefined, undefined, hashOf, async (w) => {
-      const m = await essentialProvider.loadModel(w.item, { raw: true })
+    const dressed = await dressPlayer(worn, undefined, undefined, hashOf, async (w, slim) => {
+      const m = await essentialProvider.loadModel(w.item, { raw: true, slim })
       loaded.push(m)
       return m
     })
@@ -293,7 +297,7 @@ export const essentialProvider: CosmeticProvider = {
   loadModel(item, opts) {
     const e = byId.get(item.id)
     if (!e) return Promise.reject(new Error(`Unknown item ${item.id}`))
-    return loadModel(e, !!opts?.raw)
+    return loadModel(e, !!opts?.raw, !!opts?.slim)
   },
 
   async sourceFiles(item) {

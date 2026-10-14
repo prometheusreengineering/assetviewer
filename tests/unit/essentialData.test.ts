@@ -81,7 +81,8 @@ describe('catalog', () => {
     expect(hat).toMatchObject({ geometry: 'geometry.steve.json', animations: 'animations.json', settings: 'settings.json' })
     // no name: the id, humanized
     expect(c.entries.find((e) => e.item.id === 'TEST_TOP')!.item.name).toBe('Test Top')
-    expect(c.files).toBe(5 + 4 + 2 + 2 + 5)
+    expect(c.files).toBe(5 + 4 + 3 + 2 + 5)
+    expect(c.entries.find((e) => e.item.id === 'TEST_TOP')!.geometryAlex).toBe('geometry.alex.json')
     const wings = c.entries.find((e) => e.item.id === 'TEST_WINGS')!
     expect(wings.textures).toEqual([{ name: 'default', path: 'texture.png', emissive: 'emissive.png' }])
     expect(wings.skinMask).toEqual({ steve: 'skin_mask.steve.png', alex: undefined })

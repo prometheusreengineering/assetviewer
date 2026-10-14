@@ -47,7 +47,7 @@ describe('connected catalog', () => {
       ['emote', 1, 'Emotes & effects'],
       ['outfit', 4, 'Tools'],
     ])
-    expect(ep.stats!()).toEqual({ items: 5, files: 18, indexes: [] })
+    expect(ep.stats!()).toEqual({ items: 5, files: 19, indexes: [] })
   })
 
   it('fields and info', () => {
@@ -134,6 +134,26 @@ describe('models', () => {
     // raw: the side's own skin mask
     const raw = await ep.loadModel(item('TEST_BRACELET'), { raw: true })
     expect((raw.object.userData.skinMask as ImageBitmap).width).toBe(64)
+  })
+
+  it('a slim player wears the slim-arm geometry; other views keep the wide one', async () => {
+    const armWidth = async (opts: { raw?: boolean; slim?: boolean }) => {
+      const m = await ep.loadModel(item('TEST_TOP'), opts)
+      let w = 0
+      m.object.traverse((o) => {
+        if (o.name !== 'arm_right') return
+        o.traverse((x) => {
+          if (x instanceof Mesh) {
+            x.geometry.computeBoundingBox()
+            w = Math.round(x.geometry.boundingBox!.max.x - x.geometry.boundingBox!.min.x)
+          }
+        })
+      })
+      return w
+    }
+    expect(await armWidth({ raw: true, slim: true })).toBe(3)
+    expect(await armWidth({ raw: true })).toBe(4)
+    expect(await armWidth({ slim: true })).toBe(4)
   })
 
   it('player space keeps blocks and mirrors on z', async () => {

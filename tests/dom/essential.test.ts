@@ -37,7 +37,7 @@ describe('Essential setup', () => {
     FakeIntersectionObserver.intersectAll()
     await settle(20)
     expect($$('.card .name').map((e) => e.textContent)).toEqual(['Test Hat'])
-    expect($('.foot')!.textContent).toContain('Essential: 5 items · 18 files')
+    expect($('.foot')!.textContent).toContain('Essential: 5 items · 19 files')
     expect($('.foot')!.textContent).not.toContain('index')
   })
 

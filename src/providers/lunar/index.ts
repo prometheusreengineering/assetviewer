@@ -151,7 +151,16 @@ async function loadAnim(path: string | undefined): Promise<{ anim?: AnimFile; fi
   return { file, anim: JSON.parse(new TextDecoder().decode(file!.data)) as AnimFile }
 }
 
-async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedModel> {
+/** The geometry of a gek `model` map (path -> Molang condition): the slim one (`is_slim` true) on a slim player, else the default. */
+export function gekModelPath(model: string | Record<string, string> | undefined, slim: boolean): string | undefined {
+  if (typeof model !== 'object' || !model) return model
+  const entries = Object.entries(model)
+  const isSlim = ([, c]: [string, string]) => /is_slim/.test(c) && !/!/.test(c)
+  const pick = slim ? entries.find(isSlim) : undefined
+  return (pick ?? entries.find((e) => !isSlim(e)) ?? entries[0])?.[0]
+}
+
+async function loadGek(entry: LunarEntry, playerSpace = false, slim = false): Promise<LoadedModel> {
   const gekHash = hashOf(entry.path)
   const raw = await getFileJson<{
     model?: string | Record<string, string>
@@ -168,7 +177,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
     state_machine?: { controllers?: { states?: { anim: string; plays_when?: string }[] }[] }
   }>(gekHash)
   // `model` may map several geometries to conditions (normal / slim arms); use the default one.
-  const modelPath = typeof raw.model === 'object' && raw.model ? Object.entries(raw.model).find(([, c]) => !/is_slim/.test(c) || /!/.test(c))?.[0] ?? Object.keys(raw.model)[0] : raw.model
+  const modelPath = gekModelPath(raw.model, slim && playerSpace)
   if (!modelPath || !raw.texture) throw new Error('gek has no model/texture')
   const gek = { model: modelPath, texture: raw.texture, animation: raw.animation }
   const texKnown = catalog!.files.has(PREFIX + stripNs(gek.texture))
@@ -510,7 +519,7 @@ export const lunarProvider: CosmeticProvider = {
   loadModel(item, opts) {
     const e = byId.get(item.id)!
     const raw = !!opts?.raw
-    if (e.kind === 'gek') return loadGek(e, raw)
+    if (e.kind === 'gek') return loadGek(e, raw, !!opts?.slim)
     if (e.kind === 'wing2d') return loadWing2d(e, raw)
     if (e.kind === 'cloak') return loadCloak(e, raw)
     if (e.kind === 'emote') return loadEmote(catalog!.emotes!.emotes.find((x) => x.id === item.fields.id)!, catalog!.emotes!, hashOf)
@@ -520,7 +529,7 @@ export const lunarProvider: CosmeticProvider = {
   dressPlayer(items, emote) {
     const entries = items.map((it) => byId.get(it.id)).filter((e): e is LunarEntry => !!e && e.kind !== 'image' && e.kind !== 'file' && e.kind !== 'emote')
     const em = emote ? catalog!.emotes?.emotes.find((x) => x.id === emote.fields.id) : undefined
-    return dressPlayer(entries, em, catalog!.emotes, hashOf, (e) => lunarProvider.loadModel(e.item, { raw: true }))
+    return dressPlayer(entries, em, catalog!.emotes, hashOf, (e, slim) => lunarProvider.loadModel(e.item, { raw: true, slim }))
   },
 
   itemById: (id) => byId.get(id)?.item,

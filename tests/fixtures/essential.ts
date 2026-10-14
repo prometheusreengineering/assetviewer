@@ -33,6 +33,13 @@ export const BRACELET_GEO = geo([
   { name: 'arm_left', parent: 'root', pivot: [5, 22, 0] },
   { name: 'side_left', parent: 'arm_left', pivot: [5, 22, 0], cubes: [{ origin: [3.5, 13, -2.5], size: [5, 2, 5], uv: [0, 8] }] },
 ])
+// The same top with 3 px (slim) arms
+export const TOP_ALEX_GEO = geo([
+  { name: 'root', pivot: [0, 0, 0] },
+  { name: 'body', parent: 'root', pivot: [0, 24, 0], cubes: [{ origin: [-4, 12, -2], size: [8, 12, 4], uv: [16, 16] }] },
+  { name: 'arm_right', parent: 'root', pivot: [-5, 22, 0], cubes: [{ origin: [-7, 12, -2], size: [3, 12, 4], uv: [40, 16] }] },
+  { name: 'arm_left', parent: 'root', pivot: [5, 22, 0], cubes: [{ origin: [4, 12, -2], size: [3, 12, 4], uv: [32, 48] }] },
+])
 export const HAT_ANIM = {
   format_version: '1.8.0',
   animations: {
@@ -87,7 +94,7 @@ const DEFS: Def[] = [
   {
     id: 'TEST_TOP',
     category: 'TOP',
-    files: { 'geometry.steve.json': TOP_GEO, 'texture.png': png(64, 64) },
+    files: { 'geometry.steve.json': TOP_GEO, 'geometry.alex.json': TOP_ALEX_GEO, 'texture.png': png(64, 64) },
     // its texture is only on the "CDN"
     remote: ['texture.png'],
   },
