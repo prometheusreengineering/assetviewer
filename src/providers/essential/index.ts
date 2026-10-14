@@ -7,11 +7,14 @@ import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
 import { buildRig, finish } from '../../three/rig'
+import { lunarHashOf } from '../lunar'
+import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, LoadedModel } from '../types'
 import { buildEssentialCatalog, categoryId, ESSENTIAL_CATEGORIES, orderVariants, type EssentialCatalog, type EssentialEntry } from './catalog'
 import { assetBytes, filesSource, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
 
 export const EVERYTHING = 'everything'
+export const OUTFIT = 'outfit'
 const HANDLE_KEY = 'assetviewer.essential.dir'
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary']
 const TILE_CATEGORIES = new Set(['EMOTE', 'EFFECT', 'ICON'])
@@ -169,6 +172,8 @@ export const essentialProvider: CosmeticProvider = {
       // Emotes, effects and icons aren't wearable models (yet), so they are not outfit slots.
       if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: TILE_CATEGORIES.has(b) ? 'Emotes & effects' : 'Cosmetics (3D)' })
     }
+    const wearable = catalog.entries.filter((e) => !e.item.thumb).length
+    defs.push({ id: OUTFIT, count: wearable, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })
     return defs
   },
 
@@ -194,6 +199,13 @@ export const essentialProvider: CosmeticProvider = {
   items: (category) => (catalog?.entries ?? []).filter((e) => category === EVERYTHING || e.item.category === category).map((e) => e.item),
 
   itemById: (id) => byId.get(id)?.item,
+
+  async dressPlayer(items) {
+    // The player body and skin are Lunar's (its CDN has the emote armature), like Dawn's outfits.
+    const hashOf = await lunarHashOf()
+    const worn = items.map((it) => byId.get(it.id)).filter((e): e is EssentialEntry => !!e && !e.item.thumb).map((e) => ({ kind: 'essential', item: e.item }))
+    return dressPlayer(worn, undefined, undefined, hashOf, (w) => essentialProvider.loadModel(w.item, { raw: true }))
+  },
 
   imageUrl: () => Promise.reject(new Error('Essential items are 3D models')),
 

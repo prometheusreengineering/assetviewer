@@ -26,6 +26,16 @@ const ANCHOR: Record<string, string> = {
   rightleg: 'right_leg',
   leftleg: 'left_leg',
 }
+// Essential models hang their parts off a `root` bone with plain names.
+const ESSENTIAL: Record<string, string> = {
+  head: 'head',
+  body: 'low_body',
+  cape: 'low_body',
+  arm_right: 'right_arm',
+  arm_left: 'left_arm',
+  leg_right: 'right_leg',
+  leg_left: 'left_leg',
+}
 const OTHER_SIDE: Record<string, string> = { right_arm: 'left_arm', left_arm: 'right_arm', right_leg: 'left_leg', left_leg: 'right_leg' }
 /** Older OBJ models (legacy hats/bodywear) are placed around these points (blocks). */
 const HEAD_CENTER = 1.75
@@ -118,8 +128,9 @@ function attach(player: Player, scene: Group, object: Object3D, entry: Wearable)
     // "armorRightArm"), which leaves the bone at the root.
     const m = /^biped(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg|RightItem|LeftItem)/.exec(o.name) ?? /^(?:biped|armor)(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg)/.exec(o.userData.missingParent ?? '')
     const a = m ? undefined : /^anchor_(head|body|rightarm|leftarm|rightleg|leftleg)$/i.exec(o.name)
-    if (!m && !a) return
-    let target = m ? BIPED[m[1]!]! : ANCHOR[a![1]!.toLowerCase()]!
+    const e = m || a || entry.kind !== 'essential' || o.parent?.name !== 'root' ? undefined : ESSENTIAL[o.name]
+    if (!m && !a && !e) return
+    let target = m ? BIPED[m[1]!]! : a ? ANCHOR[a[1]!.toLowerCase()]! : e!
     // Some models mirror their left/right pivots; follow the limb on the same side.
     const other = OTHER_SIDE[target]
     if (other) {

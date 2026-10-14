@@ -4,6 +4,8 @@ import { connect, essentialProvider as ep, essentialState, forget } from '../../
 import { memorySource } from '../../src/providers/essential/localData'
 import { essentialFixture } from '../fixtures/essential'
 import { installBitmapStubs } from '../helpers/bitmaps'
+import { installCdn } from '../helpers/cdnMock'
+import { LUNAR_FULL } from '../fixtures/lunar'
 
 const fx = essentialFixture()
 const item = (id: string) => ep.itemById!(id)!
@@ -19,6 +21,13 @@ const fetchMock = vi.fn(async (url: string) => {
 
 beforeAll(async () => {
   installBitmapStubs()
+  // Lunar's fixture CDN serves the player body for dressing; the rest goes to the Essential "CDN"
+  const lunar = installCdn(LUNAR_FULL)
+  fetchMock.mockImplementation(async (url: string) => {
+    const b = fx.remote.get(String(url))
+    if (b) return new Response(b.slice().buffer as ArrayBuffer)
+    return (lunar.fetch as unknown as typeof fetch)(url)
+  })
   vi.stubGlobal('caches', undefined)
   vi.stubGlobal('fetch', fetchMock)
   await connect({ dumps: memorySource(fx.dumps), cache: memorySource(fx.cache) })
@@ -35,6 +44,7 @@ describe('connected catalog', () => {
       ['top', 1, 'Cosmetics (3D)'],
       ['wings', 1, 'Cosmetics (3D)'],
       ['emote', 1, 'Emotes & effects'],
+      ['outfit', 3, 'Tools'],
     ])
     expect(ep.stats!()).toEqual({ items: 4, files: 11, indexes: [] })
   })
@@ -102,6 +112,25 @@ describe('models', () => {
     const files = await ep.sourceFiles!(item('TEST_HAT'))
     expect(files.map((f) => f.name).sort()).toEqual(['animations.json', 'geometry.steve.json', 'settings.json', 'variants_blue_texture.png', 'variants_red_texture.png'])
     expect(ep.estimateSize!(item('TEST_HAT'))).toBeGreaterThan(0)
+  })
+})
+
+describe('dressPlayer', () => {
+  it("socket Essential parts under root to the player's bones; emotes aren't worn", async () => {
+    const m = await ep.dressPlayer!([item('TEST_HAT'), item('TEST_TOP'), item('TEST_WINGS'), item('TEST_DANCE')])
+    m.object.updateMatrixWorld(true)
+    const parentBone = (name: string) => {
+      const out: (string | undefined)[] = []
+      m.object.traverse((o) => void (o.name === name && out.push(o.parent?.parent?.name)))
+      return out
+    }
+    expect(parentBone('head')).toContain('head')
+    expect(parentBone('arm_right')).toEqual(['right_arm'])
+    expect(parentBone('arm_left')).toEqual(['left_arm'])
+    // the top's body and the wings' body both follow the torso
+    expect(parentBone('body').filter((b) => b === 'low_body')).toHaveLength(2)
+    m.tick(400)
+    m.dispose()
   })
 })
 
