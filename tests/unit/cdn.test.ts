@@ -174,3 +174,39 @@ describe('retries', () => {
     expect(fetch).toHaveBeenCalledTimes(5)
   })
 })
+
+describe('other urls', () => {
+  it('getUrlBuffer caches any url forever', async () => {
+    const { caches, store } = fakeCaches()
+    const fetch = vi.fn(async () => ok('dawn'))
+    vi.stubGlobal('caches', caches)
+    vi.stubGlobal('fetch', fetch)
+    const cdn = await load()
+    const url = '/dawn/game/x.webp?h=abc'
+    expect(new TextDecoder().decode(await cdn.getUrlBuffer(url))).toBe('dawn')
+    await vi.waitFor(() => expect(store.has(url)).toBe(true))
+    await cdn.getUrlBuffer(url)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('getFreshBuffer goes to the network first and falls back to the cache when offline', async () => {
+    const { caches, store } = fakeCaches()
+    vi.stubGlobal('caches', caches)
+    vi.stubGlobal('fetch', vi.fn(async () => ok('v1')))
+    const cdn = await load()
+    expect(new TextDecoder().decode(await cdn.getFreshBuffer('/dawn/assets_index.json'))).toBe('v1')
+    await vi.waitFor(() => expect(store.has('/dawn/assets_index.json')).toBe(true))
+    vi.stubGlobal('fetch', vi.fn(async () => ok('v2')))
+    expect(new TextDecoder().decode(await cdn.getFreshBuffer('/dawn/assets_index.json'))).toBe('v2')
+    await vi.waitFor(async () => expect(await store.get('/dawn/assets_index.json')!.clone().text()).toBe('v2'))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    expect(new TextDecoder().decode(await cdn.getFreshBuffer('/dawn/assets_index.json'))).toBe('v2')
+  })
+
+  it('getFreshBuffer rethrows when there is nothing cached', async () => {
+    vi.stubGlobal('caches', undefined)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    const cdn = await load()
+    await expect(cdn.getFreshBuffer('/dawn/assets_index.json')).rejects.toThrow(/^404 /)
+  })
+})

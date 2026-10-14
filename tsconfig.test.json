@@ -9,5 +9,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts", "functions/**/*.ts"]
 }

@@ -47,6 +47,28 @@ function dedupe(url: string): Promise<ArrayBuffer> {
   return p
 }
 
+/** Any content-addressed URL (the hash must be part of the URL, e.g. `?h=<sha1>`), cached forever. */
+export const getUrlBuffer = (url: string) => dedupe(url)
+
+/** A URL whose content changes (an index): network first, the cached copy when offline. */
+export async function getFreshBuffer(url: string): Promise<ArrayBuffer> {
+  let cache: Cache | undefined
+  try {
+    cache = await caches.open(CACHE_NAME)
+  } catch {
+    cache = undefined
+  }
+  try {
+    const res = await fetchRetry(url, 3)
+    cache?.put(url, res.clone()).catch(() => {})
+    return await res.arrayBuffer()
+  } catch (e) {
+    const hit = await cache?.match(url).catch(() => undefined)
+    if (hit) return hit.arrayBuffer()
+    throw e
+  }
+}
+
 export const getIndexBuffer = (hash: string) => dedupe(indexUrl(hash))
 export const getFileBuffer = (hash: string) => dedupe(fileUrl(hash))
 export const getFileText = async (hash: string) => new TextDecoder().decode(await getFileBuffer(hash))
