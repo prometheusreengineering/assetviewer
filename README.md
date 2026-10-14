@@ -2,7 +2,7 @@
 
 A feature-rich unofficial non-affiliated asset viewer for the cosmetic providers we previously developed patches for,
 such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-lunar) and
-[Essential Mod](https://github.com/prometheusreengineering/minecraft-essential) (coming soon), plus Dawn Client.
+[Essential Mod](https://github.com/prometheusreengineering/minecraft-essential), plus Dawn Client.
 
 [![Discord](https://img.shields.io/discord/1197794960985043034?style=for-the-badge&label=Discord&color=rgb(88%2C%20101%2C%20242)%20)](https://discord.gg/BFDWmPfmXg)
 
@@ -10,6 +10,9 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
 
 - Browses ALL cosmetics, emotes and resources on Lunar Client's public asset CDN (6,500+ items), and every cosmetic on
   Dawn Client's asset CDN (860+ items, with animated textures).
+- Shows Essential Mod cosmetics from your own installation: pick your `.minecraft` folder and the cosmetic dumps
+  (written by the Prometheus patch) and Essential's cosmetic cache are read locally in your browser. Nothing of
+  Essential is hosted here and nothing is uploaded.
 - Previews every cosmetic in 3D: hats, cloaks, wings, pets, suits, auras and more, with their animations.
 - Plays emotes on a player, including props and particle effects.
 - Shows cosmetics on a player with any Minecraft skin, alone or as a full outfit in the outfit builder.
@@ -19,7 +22,7 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
 
 ### Future Plans
 
-- Essential Mod cosmetics.
+- Essential emotes, particle effects and sounds.
 - Slim (Alex) player arms.
 
 ## Development
@@ -67,7 +70,7 @@ the same through the Vite dev server.
 ## Disclaimer
 
 This project is intended for educational purposes only. We are not responsible for any damage caused by this project.
-Assets belong to their respective owners. This project is not affiliated with Lunar Client, Moonsworth or Dawn Client.
+Assets belong to their respective owners. This project is not affiliated with Lunar Client, Moonsworth, Dawn Client, Essential or ModCore.
 
 This project was made almost entirely with Claude Opus 5.5 on Medium/High effort.
 
