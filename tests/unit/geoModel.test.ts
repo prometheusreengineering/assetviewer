@@ -159,6 +159,10 @@ describe('buildGeoRig', () => {
     expect(uv[5 * 8]! * 32).toBeCloseTo(4)
     expect(uv[5 * 8 + 2]! * 32).toBeCloseTo(2)
   })
+  it('a geometry without bones is an empty rig (an "off" cape)', () => {
+    const { root, bones } = buildGeoRig({ 'minecraft:geometry': [{ description: {} }] } as unknown as GeoFile, mat())
+    expect([root.children.length, bones.size]).toEqual([0, 0])
+  })
   it('defaults the texture size to 16 and buildGeoModel returns the root', () => {
     const g: GeoFile = { 'minecraft:geometry': [{ description: {}, bones: [{ name: 'b', cubes: [{ origin: [0, 0, 0], size: [16, 16, 16], uv: [0, 0] }] }] }] }
     const m = buildGeoModel(g, mat())
