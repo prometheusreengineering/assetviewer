@@ -52,3 +52,39 @@ export function installCdn(files: [string, FileBody][], sizes: Record<string, nu
   vi.stubGlobal('caches', undefined)
   return { hashes, bodies, fetch, requests }
 }
+
+/**
+ * Serves `files` (paths like `game/cosmetics/hats/x.webp`) like the Dawn proxy: `/dawn/assets_index.json`
+ * lists them (`{ name, hash, url }`) and `/dawn/<path>?h=<hash>` serves them (Range supported). Other URLs go
+ * to the fetch installed before (e.g. installCdn's Lunar CDN for the player body). Removes Cache Storage.
+ */
+export function installDawnCdn(files: [string, FileBody][]): FakeCdn {
+  const hashes = new Map<string, string>()
+  const bodies = new Map<string, Uint8Array>()
+  const byPath = new Map<string, Uint8Array>()
+  files.forEach(([path, body], i) => {
+    const h = (i + 1).toString(16).padStart(40, 'd')
+    const b = bytes(body)
+    hashes.set(path, h)
+    bodies.set(h, b)
+    byPath.set(path, b)
+  })
+  const index = JSON.stringify(files.map(([name]) => ({ name, hash: hashes.get(name), url: `https://assets.dawn.gg/assets/${name}` })))
+  const before = globalThis.fetch
+  const requests: string[] = []
+  const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input)
+    if (!url.startsWith('/dawn/')) return before(input, init)
+    requests.push(url)
+    const path = url.slice('/dawn/'.length).split('?')[0]!
+    if (path === 'assets_index.json') return new Response(index)
+    const body = byPath.get(path)
+    if (!body) return new Response('not found', { status: 404 })
+    const range = new Headers(init?.headers).get('Range')?.match(/bytes=(\d+)-(\d+)/)
+    const out = range ? body.slice(Number(range[1]), Number(range[2]) + 1) : body
+    return new Response(out.slice().buffer as ArrayBuffer, { status: range ? 206 : 200 })
+  })
+  vi.stubGlobal('fetch', fetch)
+  vi.stubGlobal('caches', undefined)
+  return { hashes, bodies, fetch, requests }
+}
