@@ -2,10 +2,11 @@ import { zipSync } from 'fflate'
 import { Box3, Group, Quaternion, Vector3, type MeshLambertMaterial, type Object3D } from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { fileUrl, getFileBuffer, getFileJson, getFileText } from '../../cdn'
-import { AnimationPlayer, type AnimFile } from '../../three/animation/bedrockAnim'
+import type { AnimFile } from '../../three/animation/bedrockAnim'
 import { parseFunctions, type FnLib } from '../../three/animation/molang'
-import { disposeObject, fitObject } from '../../three/fit'
-import { buildGeoRig, createMaterial, createTexture, type Bone, type GeoFile } from '../../three/geoModel'
+import { fitObject } from '../../three/fit'
+import { buildRig, finish, stackedFrames, type Rig } from '../../three/rig'
+import { createMaterial, createTexture, type GeoFile } from '../../three/geoModel'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { LUNAR_INDEXES } from '../../config'
 import { fetchImageSize } from '../../dimensions'
@@ -116,55 +117,8 @@ async function mcmetaFor(relPath: string): Promise<Mcmeta | undefined> {
   }
 }
 
-interface Rig {
-  object: LoadedModel['object']
-  material: MeshLambertMaterial
-  bones?: Map<string, Bone>
-  player?: AnimationPlayer
-  frames: number
-  frameMs: number
-  /** texture offset.y of frame 0 */
-  baseOffset: number
-  /** +1 when frames advance upwards in texture space, -1 downwards */
-  dir: 1 | -1
-  files: DownloadFile[]
-}
-
-function finish(r: Rig): LoadedModel {
-  const tex = r.material.map!
-  let last = -1
-  let state = r.player?.state ?? ''
-  return {
-    object: r.object,
-    files: r.files,
-    frames: r.frames,
-    states: r.player?.states ?? [],
-    get state() {
-      return state
-    },
-    setState(s) {
-      r.player?.setState(s)
-      state = r.player?.state ?? ''
-    },
-    tick(ms) {
-      r.player?.tick(ms)
-      if (r.frames <= 1) return
-      const f = Math.floor(ms / r.frameMs) % r.frames
-      if (f === last) return
-      last = f
-      tex.offset.y = r.baseOffset + (r.dir * f) / r.frames
-    },
-    dispose() {
-      disposeObject(r.object)
-      ;(tex.image as ImageBitmap | undefined)?.close?.()
-      tex.dispose()
-      r.material.dispose()
-    },
-  }
-}
-
-/** Shared by gek models and legacy 2D wings: geo + texture (+ animation) -> rig. */
-async function buildRig(
+/** Shared by gek models, legacy 2D wings and cloaks: geo + texture (+ animation) -> rig with mcmeta frames. */
+async function buildLunarRig(
   geo: GeoFile,
   texBuf: ArrayBuffer,
   texRel: string,
@@ -176,21 +130,12 @@ async function buildRig(
   flipU = false,
 ): Promise<Rig> {
   const bitmap = await toBitmap(texBuf, false)
-  const tex = createTexture(bitmap)
   const d = geo['minecraft:geometry'][0]!.description
   const aspect = (d.texture_height ?? 16) / (d.texture_width ?? 16)
   const mc = await mcmetaFor(texRel)
+  // Animated textures are frames stacked vertically, each with the geometry's texture aspect.
   const frames = Math.max(1, Math.round(bitmap.height / bitmap.width / aspect))
-  tex.repeat.y = 1 / frames
-  const material = createMaterial(tex)
-  const { root, bones } = buildGeoRig(geo, material, flipU)
-  prep?.(root)
-  const player = animFile ? new AnimationPlayer(bones, animFile, await getLib(), preferred) : undefined
-  // Fit the first frame of the default animation (parts it hides don't count), not the static model.
-  player?.tick(0)
-  // raw: keep player-space coordinates (blocks) for dressing a player.
-  const object = raw ? root : fitObject(root)
-  return { object, material, bones, player, frames, frameMs: mc?.frametimeMs ?? 125, baseOffset: 0, dir: 1, files }
+  return buildRig(geo, bitmap, stackedFrames(frames, mc?.frametimeMs ?? 125), files, { animFile, lib: animFile ? await getLib() : undefined, preferred, raw, prep, flipU })
 }
 
 async function GREY_PNG(): Promise<ArrayBuffer> {
@@ -244,7 +189,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false): Promise<LoadedMo
   const states = (raw.state_machine?.controllers ?? []).flatMap((c) => c.states ?? [])
   const preferred = ['idle', ...states.filter((x) => String(x.plays_when).trim() === '1').map((x) => x.anim), 'main']
   return finish(
-    await buildRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files, playerSpace, (root) => {
+    await buildLunarRig(geo, texBuf, stripNs(gek.texture), anim, preferred, files, playerSpace, (root) => {
       // Bedrock geometry is x-mirrored and faces -z (Blockbench negates x on import). Unmirror it for the plain
       // view (front still towards the camera at -z); on a player (faces +z) that plus a half turn is a z flip.
       if (playerSpace) root.scale.z *= -1
@@ -338,7 +283,7 @@ async function loadWing2d(entry: LunarEntry, raw = false): Promise<LoadedModel> 
   const texBuf = await getFileBuffer(hashOf(entry.path))
   const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
   return finish(
-    await buildRig(dragonWingGeo(), texBuf, entry.path, DRAGON_WING_ANIM, ['main'], files, raw, (root) => {
+    await buildLunarRig(dragonWingGeo(), texBuf, entry.path, DRAGON_WING_ANIM, ['main'], files, raw, (root) => {
       // Same frame as gek models (see loadGek).
       if (raw) root.scale.z *= -1
       else root.scale.x *= -1
@@ -371,7 +316,7 @@ export const CAPE_ON_PLAYER: GeoFile = {
 async function loadCloak(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   const texBuf = await getFileBuffer(hashOf(entry.path))
   const files: DownloadFile[] = [{ name: baseName(entry.path), data: new Uint8Array(texBuf) }]
-  return finish(await buildRig(raw ? CAPE_ON_PLAYER : CAPE_GEO, texBuf, entry.path, undefined, [], files, raw))
+  return finish(await buildLunarRig(raw ? CAPE_ON_PLAYER : CAPE_GEO, texBuf, entry.path, undefined, [], files, raw))
 }
 
 async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
@@ -385,8 +330,6 @@ async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   const bitmap = await toBitmap(texBuf, true)
   const tex = createTexture(bitmap)
   const frames = Math.max(1, Math.round(bitmap.height / bitmap.width))
-  tex.repeat.y = 1 / frames
-  tex.offset.y = 1 - 1 / frames
   const material = createMaterial(tex)
   const parsedObj = new OBJLoader().parse(new TextDecoder().decode(objBuf))
   // Three conventions exist. Older models are y-down (Java, rendered with scale -1,-1,1) around the head
@@ -414,10 +357,9 @@ async function loadObj(entry: LunarEntry, raw = false): Promise<LoadedModel> {
   return finish({
     object: raw ? obj : fitObject(obj),
     material,
-    frames,
-    frameMs: mc?.frametimeMs ?? 125,
-    baseOffset: 1 - 1 / frames,
-    dir: -1,
+    layout: stackedFrames(frames, mc?.frametimeMs ?? 125),
+    // The OBJ texture is flipped (flipY), so frame 0 is the top row in texture space.
+    flipY: true,
     files,
   })
 }

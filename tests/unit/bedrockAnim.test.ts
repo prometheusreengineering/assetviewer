@@ -1,6 +1,6 @@
 import { Group } from 'three'
 import { describe, expect, it } from 'vitest'
-import { AnimationPlayer, type AnimFile } from '../../src/three/animation/bedrockAnim'
+import { AnimationPlayer, catmullRom, EASINGS, type AnimFile } from '../../src/three/animation/bedrockAnim'
 import { parseFunctions } from '../../src/three/animation/molang'
 import type { Bone } from '../../src/three/geoModel'
 
@@ -96,8 +96,9 @@ describe('channels', () => {
     expect(at(0)).toEqual([0, 0, 0])
     expect(at(1)).toEqual([5, 10, 15])
     expect(at(1.5)).toEqual([10, 20, 30])
-    // `post` wins over `pre` for the frame's value
-    expect(at(2)).toEqual([5, 10, 15])
+    // a segment runs from the earlier frame's `post` to the next frame's `pre`
+    expect(at(2)).toEqual([15, 20, 30])
+    expect(at(3)).toEqual([0, 0, 0])
     expect(at(9)).toEqual([0, 0, 0])
   })
 
@@ -170,5 +171,47 @@ describe('bones without tracks', () => {
     const p = new AnimationPlayer(rig(a), { animations: {} }, lib)
     p.tick(100)
     expect(a.group.position.toArray()).toEqual([5, 5, 5])
+  })
+})
+
+describe('GeckoLib keyframes', () => {
+  const run = (position: object, t: number) => {
+    const b = bone('b')
+    const p = new AnimationPlayer(rig(b), { animations: { idle: { animation_length: 10, bones: { b: { position: position as never } } } } }, lib)
+    p.tick(t * 1000)
+    return b.group.position.x
+  }
+  it('easing applies to the segment ending at the eased keyframe', () => {
+    const kf = { '0': { vector: [0, 0, 0] }, '1': { vector: [10, 0, 0], easing: 'easeInSine' } }
+    expect(run(kf, 0.5)).toBeCloseTo(10 * EASINGS.easeInSine!(0.5))
+    expect(run({ ...kf, '1': { vector: [10, 0, 0], easing: 'easeOutSine' } }, 0.5)).toBeCloseTo(10 * Math.sin(Math.PI / 4))
+    expect(run({ ...kf, '1': { vector: [10, 0, 0], easing: 'nope' } }, 0.5)).toBeCloseTo(5)
+  })
+  it('step easing holds with easingArgs steps', () => {
+    expect(run({ '0': [0, 0, 0], '1': { vector: [10, 0, 0], easing: 'step', easingArgs: [2] } }, 0.4)).toBe(0)
+    expect(run({ '0': [0, 0, 0], '1': { vector: [10, 0, 0], easing: 'step', easingArgs: [2] } }, 0.6)).toBe(5)
+    expect(run({ '0': [0, 0, 0], '1': { vector: [10, 0, 0], easing: 'step', easingArgs: [4] } }, 0.6)).toBe(5)
+  })
+  it('catmull-rom passes through the keyframes and curves between them', () => {
+    const kf = { '0': { post: [0, 0, 0], lerp_mode: 'catmullrom' }, '1': { post: [10, 0, 0], lerp_mode: 'catmullrom' }, '2': { post: [0, 0, 0], lerp_mode: 'catmullrom' } }
+    expect(run(kf, 1)).toBeCloseTo(10)
+    // overshoots the straight line near the peak
+    expect(run(kf, 0.75)).toBeGreaterThan(7.5)
+    expect(catmullRom(0, 0, 10, 10, 0.5)).toBeCloseTo(5)
+  })
+  it('without animation_length an animation loops at its last keyframe; hold_on_last_frame holds', () => {
+    const b = bone('b')
+    const file: AnimFile = {
+      animations: {
+        idle: { loop: true, bones: { b: { position: { '0': [0, 0, 0], '2': [20, 0, 0] } } } },
+        hold: { loop: 'hold_on_last_frame', bones: { b: { position: { '0': [0, 0, 0], '2': [20, 0, 0] } } } },
+      },
+    }
+    const p = new AnimationPlayer(rig(b), file, lib)
+    p.tick(3000)
+    expect(b.group.position.x).toBeCloseTo(10)
+    const h = new AnimationPlayer(rig(b), file, lib, ['hold'])
+    h.tick(3000)
+    expect(b.group.position.x).toBeCloseTo(20)
   })
 })

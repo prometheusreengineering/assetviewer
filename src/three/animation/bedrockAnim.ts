@@ -30,6 +30,8 @@ type Vec3 = (s: Scope) => [number, number, number]
 interface Track {
   /** Evaluates to a vec3 at the current scope. */
   eval: Vec3
+  /** Time of the last keyframe (s). */
+  end?: number
 }
 
 function compileComponent(c: Raw | undefined, lib: FnLib): Compiled {
@@ -55,18 +57,56 @@ function compileVec(v: Vec, lib: FnLib): Vec3 {
   }
 }
 
+/** GeckoLib easings: applied to the segment that ends at the keyframe carrying them. */
+export const EASINGS: Record<string, (t: number, arg?: number) => number> = {
+  linear: (t) => t,
+  step: (t, steps = 2) => Math.floor(t * Math.max(1, steps)) / Math.max(1, steps),
+  easeInSine: (t) => 1 - Math.cos((t * Math.PI) / 2),
+  easeOutSine: (t) => Math.sin((t * Math.PI) / 2),
+  easeInOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+  easeInQuad: (t) => t * t,
+  easeOutQuad: (t) => 1 - (1 - t) * (1 - t),
+  easeInOutQuad: (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2),
+  easeInCubic: (t) => t * t * t,
+  easeOutCubic: (t) => 1 - (1 - t) ** 3,
+  easeInOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2),
+}
+
+/** Catmull-Rom spline through p1..p2 with neighbours p0, p3 (Bedrock's `lerp_mode: catmullrom`). */
+export function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number) {
+  const t2 = t * t
+  const t3 = t2 * t
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+}
+
+interface Frame {
+  t: number
+  /** Value arriving at the keyframe and leaving it (they differ for a jump). */
+  pre: Vec3
+  post: Vec3
+  ease?: (t: number) => number
+  smooth: boolean
+}
+
 function compileChannel(ch: Channel | undefined, lib: FnLib): Track | undefined {
   if (ch === undefined) return undefined
   if (typeof ch === 'number' || typeof ch === 'string' || Array.isArray(ch)) return { eval: compileVec(ch, lib) }
   if ('vector' in ch && ch.vector !== undefined) return { eval: compileVec(ch.vector as Vec, lib) }
 
-  // Keyframes: { "0.0": [..], "0.5": { post: [..] }, "1.0": { vector: [..] }, ... }
-  const frames = Object.entries(ch as Record<string, Vec | Keyframe>)
+  // Keyframes: { "0.0": [..], "0.5": { pre: [..], post: [..] }, "1.0": { vector: [..], easing: "easeInSine" }, ... }
+  const frames: Frame[] = Object.entries(ch as Record<string, Vec | Keyframe>)
     .filter(([k]) => !Number.isNaN(Number(k)))
     .map(([k, val]) => {
+      if (Array.isArray(val) || typeof val !== 'object') {
+        const v = compileVec(val as Vec, lib)
+        return { t: Number(k), pre: v, post: v, smooth: false }
+      }
       const kf = val as Keyframe
-      const v = Array.isArray(val) || typeof val !== 'object' ? (val as Vec) : ((kf.vector ?? kf.post ?? kf.pre ?? 0) as Vec)
-      return { t: Number(k), v: compileVec(v, lib) }
+      const post = compileVec((kf.post ?? kf.vector ?? kf.pre ?? 0) as Vec, lib)
+      const pre = kf.pre !== undefined ? compileVec(kf.pre, lib) : post
+      const fn = typeof kf.easing === 'string' ? EASINGS[kf.easing] : undefined
+      const arg = Array.isArray(kf.easingArgs) ? Number(kf.easingArgs[0]) : undefined
+      return { t: Number(k), pre, post, ease: fn && ((x: number) => fn(x, arg)), smooth: kf.lerp_mode === 'catmullrom' }
     })
     .sort((a, b) => a.t - b.t)
   if (!frames.length) return undefined
@@ -77,12 +117,20 @@ function compileChannel(ch: Channel | undefined, lib: FnLib): Track | undefined 
       while (i < frames.length - 1 && frames[i + 1]!.t <= t) i++
       const a = frames[i]!
       const b = frames[i + 1]
-      if (!b || t <= a.t) return a.v(s)
-      const k = (t - a.t) / (b.t - a.t)
-      const va = a.v(s)
-      const vb = b.v(s)
+      if (t < a.t) return a.pre(s)
+      if (!b) return a.post(s)
+      let k = (t - a.t) / (b.t - a.t)
+      const va = a.post(s)
+      const vb = b.pre(s)
+      if (a.smooth || b.smooth) {
+        const v0 = (frames[i - 1] ?? a).post(s)
+        const v3 = (frames[i + 2] ?? b).pre(s)
+        return [0, 1, 2].map((j) => catmullRom(v0[j]!, va[j]!, vb[j]!, v3[j]!, k)) as [number, number, number]
+      }
+      if (b.ease) k = b.ease(k)
       return [va[0] + (vb[0] - va[0]) * k, va[1] + (vb[1] - va[1]) * k, va[2] + (vb[2] - va[2]) * k]
     },
+    end: frames[frames.length - 1]!.t,
   }
 }
 
@@ -119,7 +167,9 @@ export class AnimationPlayer {
           scale: compileChannel(ab.scale, lib),
         })
       }
-      this.anims.set(name, { length: a.animation_length ?? 0, loop: a.loop !== false, bones: cb })
+      // Without animation_length the animation ends at its last keyframe; "hold_on_last_frame" doesn't loop.
+      const end = Math.max(0, ...[...cb.values()].flatMap((b) => [b.rotation?.end ?? 0, b.position?.end ?? 0, b.scale?.end ?? 0]))
+      this.anims.set(name, { length: a.animation_length ?? end, loop: a.loop !== false && a.loop !== 'false' && a.loop !== 'hold_on_last_frame', bones: cb })
     }
     this.states = [...this.anims.keys()]
     this.state = preferred.find((p) => this.anims.has(p)) ?? this.states.find((s) => s !== 'gui') ?? this.states[0] ?? ''

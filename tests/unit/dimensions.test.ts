@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fetchImageSize, imageSize } from '../../src/dimensions'
-import { gif, png, webpVP8, webpVP8L, webpVP8X } from '../fixtures/images'
+import { avif, gif, png, webpVP8, webpVP8L, webpVP8X } from '../fixtures/images'
 
 describe('imageSize', () => {
   it.each([
@@ -9,6 +9,7 @@ describe('imageSize', () => {
     ['WebP VP8X', webpVP8X(1024, 2048), [1024, 2048]],
     ['WebP VP8L', webpVP8L(64, 32), [64, 32]],
     ['WebP VP8', webpVP8(128, 96), [128, 96]],
+    ['AVIF', avif(352, 272), [352, 272]],
   ] as const)('%s', (_, bytes, size) => expect(imageSize(bytes)).toEqual(size))
 
   it('reads large sizes', () => {
@@ -28,6 +29,8 @@ describe('imageSize', () => {
     expect(imageSize(png(1, 1).slice(0, 20))).toBeUndefined()
     expect(imageSize(gif(1, 1).slice(0, 8))).toBeUndefined()
     expect(imageSize(webpVP8X(1, 1).slice(0, 25))).toBeUndefined()
+    // AVIF's ispe box is past the first 48 bytes
+    expect(imageSize(avif(2, 2).slice(0, 48))).toBeUndefined()
     expect(imageSize(new TextEncoder().encode('{"json": true} padding padding padding'))).toBeUndefined()
     const odd = webpVP8X(1, 1)
     odd.set([...'ABCD'].map((c) => c.charCodeAt(0)), 12)

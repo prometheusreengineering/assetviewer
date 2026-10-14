@@ -30,3 +30,6 @@ dist-ssr
 # Test coverage
 coverage
 .vitest
+
+# wrangler pages dev
+.wrangler
