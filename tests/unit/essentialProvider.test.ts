@@ -47,7 +47,7 @@ describe('connected catalog', () => {
       ['emote', 1, 'Emotes & effects'],
       ['outfit', 4, 'Tools'],
     ])
-    expect(ep.stats!()).toEqual({ items: 5, files: 19, indexes: [] })
+    expect(ep.stats!()).toEqual({ items: 5, files: 22, indexes: [] })
   })
 
   it('fields and info', () => {
@@ -163,9 +163,21 @@ describe('models', () => {
     expect(mirrored).toBe(1)
   })
 
-  it('emotes are name tiles without a model', async () => {
+  it('emotes play on a player in the current skin: start, then the loop; props ride their bones', async () => {
     expect(item('TEST_DANCE').thumb).toBe('none')
-    await expect(ep.loadModel(item('TEST_DANCE'))).rejects.toThrow(/no 3D model/)
+    const m = await ep.loadModel(item('TEST_DANCE'))
+    expect(m.timeline!.duration).toBeCloseTo(3)
+    expect(m.hasSound).toBe(true)
+    // the six player parts (each with its outer layer) and the prop
+    expect(meshes(m.object)).toHaveLength(6 * 2 + 1)
+    let arm: Object3D | undefined
+    // the emote's bone (the player's arm part under it shares the name)
+    m.object.traverse((o) => void (o.name === 'arm_right' && !arm && (arm = o)))
+    m.timeline!.seek(1)
+    expect(arm!.rotation.x).toBeCloseTo(Math.PI / 2, 1)
+    m.timeline!.seek(0)
+    expect(arm!.rotation.x).toBeCloseTo(0, 3)
+    m.dispose()
   })
 
   it('source files: everything the dump lists', async () => {

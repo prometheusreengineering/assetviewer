@@ -1,6 +1,13 @@
 import { DoubleSide, Mesh, MeshBasicMaterial, type Object3D, type Texture } from 'three'
 import { createTexture } from './geoModel'
 
+/** A transparent 1x1 bitmap (stand-in texture). The canvas needs a context, or Chrome can't make a bitmap of it. */
+export function transparentPixel(): Promise<ImageBitmap> {
+  const c = new OffscreenCanvas(1, 1)
+  c.getContext('2d')
+  return createImageBitmap(c)
+}
+
 export interface GlowLayer {
   /** Swaps the glow texture (colour variants); undefined hides the layer. */
   setImage(bitmap: ImageBitmap | undefined): void

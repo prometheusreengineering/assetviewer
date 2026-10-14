@@ -200,9 +200,24 @@ export class AnimationPlayer {
     const anim = this.anims.get(this.state)
     if (!anim) return
     const t = (ms - this.startMs) / 1000
+    this.apply(anim, anim.length > 0 ? (anim.loop ? t % anim.length : Math.min(t, anim.length)) : t, ms / 1000)
+  }
+
+  /** Length (s) of an animation, 0 if unknown. */
+  lengthOf(state: string) {
+    return this.anims.get(state)?.length ?? 0
+  }
+
+  /** Poses `state` at exactly `seconds` into it (timelines drive this; it doesn't change the current state). */
+  poseAt(state: string, seconds: number) {
+    const anim = this.anims.get(state)
+    if (anim) this.apply(anim, Math.min(Math.max(seconds, 0), anim.length || seconds), seconds)
+  }
+
+  private apply(anim: CompiledAnim, animTime: number, lifeTime: number) {
     const s = this.scope
-    s.q.life_time = ms / 1000
-    s.q.anim_time = anim.length > 0 ? (anim.loop ? t % anim.length : Math.min(t, anim.length)) : t
+    s.q.life_time = lifeTime
+    s.q.anim_time = animTime
     s.q.delta_time = 1 / 60
     for (const [name, bone] of this.bones) {
       const ab = anim.bones.get(name)

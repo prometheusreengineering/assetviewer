@@ -62,8 +62,8 @@ export const ESSENTIAL_CATEGORIES: Record<string, [string, string]> = {
   EMOTE: ['Emotes', 'pi-video'],
   ICON: ['Icons', 'pi-image'],
 }
-/** Shown as a name tile: emotes play on the player, icons have no model. */
-const TILE = new Set(['EMOTE', 'ICON'])
+/** Shown as a name tile: emotes play on the player in the modal. Icons are flat images. */
+const TILE = new Set(['EMOTE'])
 
 export const categoryId = (b: string) => b.toLowerCase()
 
@@ -99,12 +99,13 @@ export function buildEssentialCatalog(dumps: unknown[]): EssentialCatalog {
     for (const t of textures) if (!t.emissive) delete t.emissive
     const geometry = files.has('geometry.steve.json') ? 'geometry.steve.json' : undefined
     const tags = d.h ?? []
-    const tile = TILE.has(d.b) || !geometry || !textures.length
+    const icon = d.b === 'ICON' && files.has('texture.png')
+    const tile = !icon && (TILE.has(d.b) || !geometry || !textures.length)
     const item: CosmeticItem = {
       id: d.a,
       name: d.c?.en_us || d.c?.en_US || humanize(d.a),
       category: categoryId(d.b),
-      render: '3d',
+      render: icon ? 'image' : '3d',
       thumb: tile ? 'none' : undefined,
       fields: {
         category: ESSENTIAL_CATEGORIES[d.b]?.[0] ?? humanize(d.b),

@@ -13,7 +13,7 @@ import type { TrackballControls } from 'three/examples/jsm/controls/TrackballCon
 import { getFileBuffer } from '../cdn'
 import { download, zipFiles } from '../download'
 import { formatBytes } from '../format'
-import { autoRotate, freeRotate, wireframe } from '../viewPrefs'
+import { autoRotate, freeRotate, sound, wireframe } from '../viewPrefs'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
 import { playerEmoteId, showOnPlayer, skinName } from '../skin'
 import AnimatedImage from './AnimatedImage.vue'
@@ -43,11 +43,12 @@ const side = ref('')
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
-const isEmote = computed(() => shown.value?.category === 'emotes')
+const isEmote = computed(() => shown.value?.category === 'emotes' || shown.value?.category === 'emote')
+const hasSound = ref(false)
 // Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
 const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
 // Second row: animation, show-on-player (+ what it reveals), or an emote's skin and play controls.
-const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || sides.value.length > 1 || canDress.value || !!timeline.value)
+const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || sides.value.length > 1 || canDress.value || !!timeline.value || hasSound.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
 const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
@@ -82,6 +83,7 @@ function teardown() {
   state.value = ''
   variants.value = []
   variant.value = ''
+  hasSound.value = false
   sides.value = []
   side.value = ''
   timeline.value = undefined
@@ -127,6 +129,8 @@ async function open(item: CosmeticItem) {
     states.value = loaded.states
     timeline.value = loaded.timeline
     state.value = loaded.state
+    hasSound.value = !!loaded.hasSound
+    loaded.setSound?.(sound.value)
     variants.value = loaded.variants ?? []
     variant.value = loaded.variant ?? ''
     sides.value = loaded.sides ?? []
@@ -204,6 +208,7 @@ watch(wireframe, applyWireframe)
 watch(state, (s) => model?.setState(s))
 watch(variant, (v) => v && model?.variant !== v && model?.setVariant?.(v))
 watch(side, (s) => s && model?.side !== s && model?.setSide?.(s))
+watch(sound, (on) => model?.setSound?.(on))
 // The header's player name changed: redraw anything wearing the skin.
 watch(skinName, () => usesSkin.value && shown.value && open(shown.value))
 watch(freeRotate, (f) => swapControls?.(f))
@@ -343,6 +348,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
             <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />
             <span class="time">{{ tlTime.toFixed(1) }} / {{ timeline.duration.toFixed(1) }} s</span>
           </template>
+          <label v-if="hasSound" title="Play the emote's sounds"><ToggleSwitch v-model="sound" /> Sound</label>
         </div>
       </template>
       <div class="row buttons">

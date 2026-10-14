@@ -59,6 +59,9 @@ export interface LoadedModel {
   variants?: string[]
   variant?: string
   setVariant?: (variant: string) => Promise<void>
+  /** Emote sounds: off until the viewer turns them on (thumbnails never do). */
+  hasSound?: boolean
+  setSound?: (on: boolean) => void
   /** Sides a one-sided cosmetic can be worn on (Essential: left/right, front/back). */
   sides?: string[]
   side?: string

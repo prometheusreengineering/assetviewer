@@ -111,7 +111,36 @@ const DEFS: Def[] = [
       'settings.json': [{ type: 'COSMETIC_BONE_HIDING', id: 'TEST_TOP', enabled: true, data: { arms: true } }, { type: 'EXTERNAL_HIDDEN_BONE', id: 'TEST_WINGS', enabled: true, data: { wing_left: true } }],
     },
   },
-  { id: 'TEST_DANCE', category: 'EMOTE', name: 'Test Dance', files: { 'geometry.steve.json': geo([{ name: 'root', pivot: [0, 0, 0] }]), 'animations.json': { animations: {} } } },
+  {
+    id: 'TEST_DANCE',
+    category: 'EMOTE',
+    name: 'Test Dance',
+    files: {
+      // Essential emote skeleton (the player's parts are added under these bones) and a prop
+      'geometry.steve.json': geo([
+        { name: 'root', pivot: [0, 0, 0] },
+        { name: 'body_orbit', parent: 'root', pivot: [0, 18, 0] },
+        { name: 'body_wrap', parent: 'body_orbit', pivot: [0, 12, 0] },
+        { name: 'body', parent: 'body_wrap', pivot: [0, 24, 0] },
+        { name: 'head', parent: 'body_wrap', pivot: [0, 24, 0] },
+        { name: 'arm_right', parent: 'body_wrap', pivot: [-5, 22, 0] },
+        { name: 'arm_left', parent: 'body_wrap', pivot: [5, 22, 0] },
+        { name: 'leg_right', parent: 'body_orbit', pivot: [-1.9, 12, 0] },
+        { name: 'leg_left', parent: 'body_orbit', pivot: [1.9, 12, 0] },
+        { name: 'prop', parent: 'arm_right', pivot: [-6, 12, 0], cubes: [{ origin: [-7, 10, -1], size: [2, 2, 2], uv: [0, 0] }] },
+      ]),
+      'animations.json': {
+        animations: {
+          'animation.dance.start': { animation_length: 1, sound_effects: { '0.0': { effect: 'beat' } }, bones: { arm_right: { rotation: { '0.0': [0, 0, 0], '1.0': [-90, 0, 0] } } } },
+          'animation.dance.loop': { loop: true, animation_length: 2, sound_effects: { '0.5': { effect: 'beat' } }, bones: { arm_right: { rotation: [-90, 0, 'math.sin(q.anim_time * 180) * 20'] } } },
+        },
+        triggers: [{ type: 'EMOTE', target: 'ALL', name: 'animation.dance.start', on_complete: { name: 'animation.dance.loop' }, loops: 1 }],
+      },
+      'texture.png': png(16, 16),
+      'sounds/sound_definitions.json': { sound_definitions: { beat: { sounds: [{ name: 'sounds/beat', volume: 0.5 }] } } },
+      'sounds/beat.ogg': 'OggS fake',
+    },
+  },
 ]
 
 export interface EssentialFixture {

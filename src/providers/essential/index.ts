@@ -7,7 +7,7 @@ import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
 import { EffectPlayer, particleCues, type LoadedEffect } from '../../three/effects'
-import { addGlowLayer } from '../../three/glow'
+import { addGlowLayer, transparentPixel } from '../../three/glow'
 import { createTexture } from '../../three/geoModel'
 import type { Scheme } from '../../three/particles'
 import type { Texture } from 'three'
@@ -17,6 +17,8 @@ import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, LoadedModel } from '../types'
 import { buildEssentialCatalog, categoryId, ESSENTIAL_CATEGORIES, orderVariants, type EssentialCatalog, type EssentialEntry } from './catalog'
 import { boneSide, defaultSide, hiddenBones, sidesOf } from './rules'
+import { buildEmote, emoteSequence, type EssentialEmoteFile } from './emote'
+import type { SoundDefinitions } from './sounds'
 import { assetBytes, filesSource, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
 
 export const EVERYTHING = 'everything'
@@ -26,6 +28,7 @@ const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary']
 // Essential's BedrockModel.TEXTURE_ANIMATION_FPS
 const TEXTURE_FPS = 7
 const TILE_CATEGORIES = new Set(['EMOTE', 'ICON'])
+// (icons are flat images, emotes play on the player in the modal: neither is an outfit slot)
 
 let folders: EssentialFolders | undefined
 let catalog: EssentialCatalog | undefined
@@ -103,9 +106,7 @@ const json = async <T>(e: EssentialEntry, path: string) => JSON.parse(new TextDe
 const optionalJson = async <T>(e: EssentialEntry, path: string | undefined) => (path ? json<T>(e, path).catch(() => undefined) : undefined)
 
 // A transparent 1x1 stand-in when the default variant has no glow but another one does.
-async function blankBitmap() {
-  return createImageBitmap(new OffscreenCanvas(1, 1))
-}
+const blankBitmap = transparentPixel
 
 /**
  * The cosmetic's particle effects by identifier. A texture naming one of its own files (`boop.texture`, a full
@@ -145,7 +146,35 @@ interface EssentialAnimFile extends AnimFile {
   triggers?: { type?: string; name?: string }[]
 }
 
+/** An emote on the player in the current skin, with its props, particles and sounds (see emote.ts). */
+async function loadEmote(e: EssentialEntry): Promise<LoadedModel> {
+  if (!e.geometry || !e.animations) throw new Error(`${e.item.name} has no emote animation`)
+  const [geo, anim, defs] = await Promise.all([
+    json<GeoFile>(e, e.geometry),
+    json<EssentialEmoteFile>(e, e.animations),
+    optionalJson<SoundDefinitions>(e, e.files.has('sounds/sound_definitions.json') ? 'sounds/sound_definitions.json' : undefined),
+  ])
+  const texPath = e.textures[0]?.path
+  const texture = texPath ? (await decodeFrames(await bytes(e, texPath), 'image/png')).bitmap : undefined
+  const wanted = new Set(particleCues(anim, emoteSequence(anim)).map((c) => c.effect))
+  const own = createTexture(texture ?? (await blankBitmap()))
+  const effects = wanted.size ? await loadEffects(e, wanted, own).catch(() => new Map<string, LoadedEffect>()) : new Map<string, LoadedEffect>()
+  const files: DownloadFile[] = []
+  for (const p of [e.geometry, e.animations, texPath]) {
+    if (!p) continue
+    try {
+      files.push({ name: p.replace(/\//g, '_'), data: new Uint8Array(await bytes(e, p)) })
+    } catch {}
+  }
+  const sound = (path: string) => {
+    const p = e.files.has(path + '.ogg') ? path + '.ogg' : e.files.has(path) ? path : undefined
+    return p ? bytes(e, p) : Promise.resolve(undefined)
+  }
+  return buildEmote({ geo, anim, texture, effects, sounds: defs, sound, files })
+}
+
 async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise<LoadedModel> {
+  if (e.item.category === 'emote') return loadEmote(e)
   if (!e.geometry || !e.textures.length) throw new Error(`${e.item.name} has no 3D model`)
   // On a slim (Alex) player, the slim-arm geometry and skin masks.
   const alex = raw && slim
@@ -352,7 +381,12 @@ export const essentialProvider: CosmeticProvider = {
     return dressed
   },
 
-  imageUrl: () => Promise.reject(new Error('Essential items are 3D models')),
+  async imageUrl(item) {
+    // Icons: their texture, from the local files.
+    const e = byId.get(item.id)
+    if (!e?.files.has('texture.png')) throw new Error(`${item.name} has no image`)
+    return URL.createObjectURL(new Blob([await bytes(e, 'texture.png')], { type: 'image/png' }))
+  },
 
   loadModel(item, opts) {
     const e = byId.get(item.id)

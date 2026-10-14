@@ -23,3 +23,5 @@ function stored(key: string, fallback: boolean): Ref<boolean> {
 export const autoRotate = stored('assetviewer.autoRotate', true)
 export const wireframe = stored('assetviewer.wireframe', false)
 export const freeRotate = stored('assetviewer.freeRotate', false)
+/** Emote sounds in the modal (off by default; thumbnails never play any). */
+export const sound = stored('assetviewer.sound', false)

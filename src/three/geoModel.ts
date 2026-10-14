@@ -172,9 +172,10 @@ export function buildGeoModel(geo: GeoFile, material: MeshLambertMaterial): Obje
  * wings) showed every strip flipped in place and the wing fell apart into gaps.
  */
 export function buildGeoRig(geo: GeoFile, material: MeshLambertMaterial, flipU = false): { root: Object3D; bones: Map<string, Bone>; locators: Map<string, Object3D> } {
-  const g = geo['minecraft:geometry'][0]
-  const texW = g.description.texture_width ?? 16
-  const texH = g.description.texture_height ?? 16
+  // An empty file (only `format_version`) is an empty rig.
+  const g = geo['minecraft:geometry']?.[0] ?? { description: {}, bones: [] }
+  const texW = g.description?.texture_width ?? 16
+  const texH = g.description?.texture_height ?? 16
 
   const groups = new Map<string, Group>()
   const pivots = new Map<string, [number, number, number]>()
