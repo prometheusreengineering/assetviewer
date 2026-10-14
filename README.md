@@ -12,18 +12,18 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
   Dawn Client's asset CDN (860+ items, with animated textures).
 - Shows Essential Mod cosmetics from your own installation: pick your `.minecraft` folder and the cosmetic dumps
   (written by the Prometheus patch) and Essential's cosmetic cache are read locally in your browser. Nothing of
-  Essential is hosted here and nothing is uploaded.
+  Essential is hosted here and nothing is uploaded. Glow layers, animated textures, colour variants, sides, skin
+  masks, particle effects, and emotes with their sounds are all shown.
 - Previews every cosmetic in 3D: hats, cloaks, wings, pets, suits, auras and more, with their animations.
 - Plays emotes on a player, including props and particle effects.
-- Shows cosmetics on a player with any Minecraft skin, alone or as a full outfit in the outfit builder.
+- Shows cosmetics on a player with any Minecraft skin (wide or slim arms), alone or as a full outfit in the outfit builder.
 - Search, filter and sort on any field, with the view kept in the URL so it can be shared.
 - Collections, side-by-side compare and ZIP export of the source files.
 - Runs entirely in the browser; downloaded files are cached locally.
 
 ### Future Plans
 
-- Essential emotes, particle effects and sounds.
-- Slim (Alex) player arms.
+- Essential emotes in the outfit builder's pose picker.
 
 ## Development
 
