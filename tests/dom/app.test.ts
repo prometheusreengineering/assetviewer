@@ -71,7 +71,7 @@ describe('app shell', () => {
   it('essential asks for the folder of the viewer first', async () => {
     await open('/essential')
     expect($('.setup h1')!.textContent).toBe('Essential cosmetics from your own files')
-    expect($('.setup')!.textContent).toContain('Nothing is uploaded')
+    expect($('.setup')!.textContent).toContain('nothing is uploaded')
     expect($('.foot .stats')!.textContent!.trim()).toBe('')
   })
 
