@@ -655,3 +655,9 @@ export const lunarProvider: CosmeticProvider = {
 }
 
 export { zipFiles } from '../../download'
+
+/** Lunar's file lookup, for other providers that put their cosmetics on Lunar's player body (outfit builder). */
+export async function lunarHashOf(): Promise<(rel: string) => string> {
+  await lunarProvider.load()
+  return hashOf
+}

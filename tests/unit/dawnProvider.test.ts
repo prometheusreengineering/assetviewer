@@ -5,7 +5,8 @@ import { FLAT_SHIELD } from '../../src/providers/dawn/catalog'
 import { visibleBox } from '../../src/three/fit'
 import { DAWN_FILES, G, HAT_ANIM } from '../fixtures/dawn'
 import { installBitmapStubs } from '../helpers/bitmaps'
-import { installDawnCdn, type FakeCdn } from '../helpers/cdnMock'
+import { installCdn, installDawnCdn, type FakeCdn } from '../helpers/cdnMock'
+import { LUNAR_FULL } from '../fixtures/lunar'
 
 let cdn: FakeCdn
 const item = (id: string) => dp.itemById!(id)!
@@ -16,6 +17,8 @@ const meshes = (o: Object3D) => {
 }
 
 beforeAll(async () => {
+  // Lunar's CDN serves the player body for the outfit builder
+  installCdn(LUNAR_FULL)
   cdn = installDawnCdn(DAWN_FILES)
   installBitmapStubs()
   await dp.load()
@@ -25,7 +28,8 @@ afterAll(() => vi.unstubAllGlobals())
 describe('catalog in the UI', () => {
   it('categories: Everything, cosmetics in sidebar order, then resources', () => {
     const cats = dp.categories()
-    expect(cats.map((c) => c.id)).toEqual(['everything', 'hats', 'wings', 'auras', 'cloaks', 'shields', 'boots', 'trim', 'models', 'lang'])
+    expect(cats.map((c) => c.id)).toEqual(['everything', 'hats', 'wings', 'auras', 'cloaks', 'shields', 'boots', 'trim', 'models', 'lang', 'outfit'])
+    expect(cats.at(-1)).toMatchObject({ label: 'Outfit builder', group: 'Tools', count: 10 })
     expect(cats.find((c) => c.id === 'hats')).toMatchObject({ label: 'Hats', count: 3, group: 'Cosmetics (3D)' })
     expect(cats.find((c) => c.id === 'lang')).toMatchObject({ label: 'Language files', group: 'Resources' })
     expect(cats[0]!.count).toBe(dp.items(EVERYTHING).length)
@@ -154,5 +158,35 @@ describe('dimensions', () => {
     expect(item('cloaks/plainCloak').fields).toMatchObject({ width: 22, height: 17 })
     expect(item('game/lang/en_us.json').fields.width).toBeUndefined()
     expect(progress.at(-1)).toBe(2)
+  })
+})
+
+describe('dressPlayer', () => {
+  it("dresses Lunar's player: anchors follow bones, cloaks hang on the back, shields go in the left hand", async () => {
+    const ids = ['hats/testHat', 'boots/testBoots', 'cloaks/testCape', 'shields/testShield', 'trim/glowTrim', 'boots/lonelyBoots']
+    const m = await dp.dressPlayer!(ids.map(item))
+    m.object.updateMatrixWorld(true)
+    const under = (bone: string) => {
+      let found: Object3D | undefined
+      m.object.traverse((o) => void (o.name === bone && (found = o)))
+      return found
+    }
+    const named = (name: string) => {
+      const out: Object3D[] = []
+      m.object.traverse((o) => void (o.name === name && out.push(o)))
+      return out
+    }
+    // each anchor is socketed: holder -> player bone
+    const parentBone = (o: Object3D) => o.parent?.parent?.name
+    expect(named('anchor_head').map(parentBone)).toEqual(['head', 'head'])
+    expect(named('anchor_rightleg').map(parentBone)).toEqual(['right_leg'])
+    expect(named('anchor_rightarm').map(parentBone)).toEqual(['right_arm'])
+    expect(named('bipedBody').map(parentBone)).toEqual(['low_body'])
+    expect(under('left_arm')).toBeDefined()
+    // the flat image boots aren't worn; the rest bring their files
+    expect(new Set(m.files.map((f) => f.name))).toContain('testCape.avif')
+    expect(m.files.some((f) => f.name.startsWith('lonelyBoots'))).toBe(false)
+    m.tick(500)
+    m.dispose()
   })
 })

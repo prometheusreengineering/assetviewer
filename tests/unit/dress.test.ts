@@ -24,7 +24,7 @@ afterAll(() => {
   vi.restoreAllMocks()
 })
 
-const entry = (kind: Kind, category = 'hat'): LunarEntry => ({ kind, path: 'x', modelKey: '', info: {}, item: { id: 'x' + Math.random(), name: 'x', category, render: '3d', fields: {} } })
+const entry = (kind: Kind | 'geo', category = 'hat'): LunarEntry => ({ kind: kind as Kind, path: 'x', modelKey: '', info: {}, item: { id: 'x' + Math.random(), name: 'x', category, render: '3d', fields: {} } })
 const model = (object: Object3D, extra: Partial<LoadedModel> = {}): LoadedModel => ({ object, files: [{ name: 'f', data: new Uint8Array(1) }], frames: 1, tick: vi.fn(), states: [], state: '', setState: vi.fn(), dispose: vi.fn(), ...extra })
 const box = (w = 0.2, h = 0.2, d = 0.2) => new Mesh(new BoxGeometry(w, h, d), new MeshBasicMaterial())
 /** The player bone an object ended up under (through its socket holder). */
@@ -141,11 +141,28 @@ describe('dressPlayer: gek biped bones', () => {
   })
 })
 
+describe('dressPlayer: Dawn anchor bones', () => {
+  it('sockets anchor_* bones to the player bones', async () => {
+    const root = new Group()
+    const parts = ['anchor_head', 'anchor_body', 'anchor_rightarm', 'anchor_leftarm', 'anchor_rightleg', 'anchor_leftleg', 'not_an_anchor'].map((name) => {
+      const g = new Group()
+      g.name = name
+      // sides as in player space: right = -x
+      g.position.x = name.includes('right') ? -0.3 : name.includes('left') ? 0.3 : 0
+      root.add(g)
+      return g
+    })
+    await dress([root], [entry('geo')])
+    expect(parts.map(boneOf)).toEqual(['head', 'low_body', 'right_arm', 'left_arm', 'right_leg', 'left_leg', ''])
+  })
+})
+
 describe('dressPlayer: attached_bone', () => {
   it.each([
     ['HEAD', 'head'],
     ['SHOULDER', 'low_body'],
     ['RIGHT_ARM', 'right_arm'],
+    ['LEFT_HAND', 'left_arm'],
   ])('%s -> %s', async (attached, bone) => {
     const o = new Group()
     o.add(box())
@@ -156,6 +173,7 @@ describe('dressPlayer: attached_bone', () => {
       expect(o.position.toArray()).toEqual([-0.375, 0.7, 0.1])
       expect(o.rotation.x).toBeCloseTo(-Math.PI / 2)
     }
+    if (attached === 'LEFT_HAND') expect(o.position.toArray()).toEqual([0.45, 0.2, 0.2])
   })
   it('no biped bones and no attached bone: stays in the scene', async () => {
     const o = new Group()

@@ -16,7 +16,8 @@ const router = useRouter()
 
 // Every wearable 3D category is a slot.
 const slots = computed(() => props.provider.categories().filter((c) => c.group?.startsWith('Cosmetics') && c.id !== 'emotes'))
-const options = (cat: string) => props.provider.items(cat).map((it) => ({ label: it.name, value: it.id }))
+// Only what can be worn (a few cosmetics are flat images without a model).
+const options = (cat: string) => props.provider.items(cat).filter((it) => it.render === '3d').map((it) => ({ label: it.name, value: it.id }))
 const optionCache = new Map<string, { label: string; value: string }[]>()
 const optionsFor = (cat: string) => {
   if (!optionCache.has(cat)) optionCache.set(cat, options(cat))
@@ -25,7 +26,8 @@ const optionsFor = (cat: string) => {
 const emoteOptions = computed(() => props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })))
 
 // Outfit = category -> item id. The URL (?o=cat:id,...&e=emote) wins over the saved outfit, so links share it.
-const KEY = 'assetviewer.outfit'
+// Per provider (Lunar keeps the original key so saved outfits survive).
+const KEY = props.provider.id === 'lunar' ? 'assetviewer.outfit' : `assetviewer.outfit.${props.provider.id}`
 type Outfit = Record<string, string>
 function parseOutfit(o: unknown): Outfit {
   if (typeof o !== 'string' || !o) return {}
@@ -93,7 +95,7 @@ function setSlot(cat: string, id: string | null) {
   outfit.value = o
 }
 // Slots left out of "Random" (the dice on each row). Stored as exclusions so new slots start included.
-const RANDOM_KEY = 'assetviewer.outfit.random'
+const RANDOM_KEY = props.provider.id === 'lunar' ? 'assetviewer.outfit.random' : `assetviewer.outfit.random.${props.provider.id}`
 const noRandom = ref(new Set<string>())
 try {
   const v = JSON.parse(localStorage.getItem(RANDOM_KEY) ?? '[]')
@@ -113,7 +115,7 @@ function randomize() {
   const o: Outfit = { ...outfit.value }
   for (const s of slots.value) {
     if (noRandom.value.has(s.id)) continue
-    const list = props.provider.items(s.id)
+    const list = props.provider.items(s.id).filter((it) => it.render === '3d')
     if (list.length) o[s.id] = list[Math.floor(Math.random() * list.length)]!.id
   }
   outfit.value = o
@@ -195,7 +197,7 @@ onBeforeUnmount(() => {
       <div class="controls">
         <label><ToggleSwitch v-model="autoRotate" /> Auto-rotate</label>
         <label title="On: rotate freely in any direction. Off: stay upright (also applies to the preview and compare views)"><ToggleSwitch v-model="freeRotate" /> Free rotate</label>
-        <Select v-model="emoteId" :options="emoteOptions" option-label="label" option-value="value" filter show-clear size="small" placeholder="Pose: standing" class="pose" />
+        <Select v-if="emoteOptions.length" v-model="emoteId" :options="emoteOptions" option-label="label" option-value="value" filter show-clear size="small" placeholder="Pose: standing" class="pose" />
         <template v-if="timeline">
           <Button :icon="playing ? 'pi pi-pause' : 'pi pi-play'" size="small" text rounded @click="togglePlay" />
           <Slider :model-value="tlTime" :min="0" :max="timeline.duration" :step="0.05" class="scrub" @update:model-value="seek" />

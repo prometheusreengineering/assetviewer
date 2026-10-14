@@ -7,11 +7,13 @@ import type { FnLib } from '../../three/animation/molang'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
 import { buildRig, finish } from '../../three/rig'
-import { CAPE_GEO, CAPE_ON_PLAYER } from '../lunar'
+import { CAPE_GEO, CAPE_ON_PLAYER, lunarHashOf } from '../lunar'
+import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { DAWN_CATEGORIES, DAWN_RESOURCES, dawnUrl, loadDawnCatalog, type DawnCatalog, type DawnEntry } from './catalog'
 
 export const EVERYTHING = 'everything'
+export const OUTFIT = 'outfit'
 const KIND_LABELS: Record<string, string> = { geo: 'Model', variant: 'Colour variant', cloak: 'Cloak', shield: 'Flat shield', trim: 'Armor trim', image: 'Image', file: 'File' }
 // Dawn uses no custom Molang functions (only math.* and q.anim_time).
 const NO_LIB: FnLib = new Map()
@@ -85,6 +87,8 @@ async function loadParts(e: DawnEntry, raw: boolean): Promise<LoadedModel> {
   )
   const object = new Group()
   for (const m of parts) object.add(m.object)
+  // Shields without an anchor bone are held items: dressing puts them in the left hand.
+  if (e.item.category === 'shields') object.userData.attachedBone = 'LEFT_HAND'
   return combine(parts, raw ? object : fitObject(object))
 }
 
@@ -158,6 +162,8 @@ export const dawnProvider: CosmeticProvider = {
     const defs: CategoryDef[] = [{ id: EVERYTHING, count: catalog!.entries.length, label: 'Everything', icon: 'pi-th-large', group: '' }]
     for (const [id, [label, icon]] of Object.entries(DAWN_CATEGORIES)) if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: 'Cosmetics (3D)' })
     for (const [id, [label, icon]] of Object.entries(DAWN_RESOURCES)) if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: 'Resources' })
+    const wearable = catalog!.entries.filter((e) => e.item.render === '3d').length
+    defs.push({ id: OUTFIT, count: wearable, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })
     return defs
   },
 
@@ -186,6 +192,13 @@ export const dawnProvider: CosmeticProvider = {
   items: (category) => catalog!.entries.filter((e) => category === EVERYTHING || e.item.category === category).map((e) => e.item),
 
   itemById: (id) => byId.get(id)?.item,
+
+  async dressPlayer(items) {
+    // The player body and skin are Lunar's (its CDN has the emote armature).
+    const hashOf = await lunarHashOf()
+    const entries = items.map((it) => byId.get(it.id)).filter((e): e is DawnEntry => !!e && e.item.render === '3d')
+    return dressPlayer(entries, undefined, undefined, hashOf, (e) => dawnProvider.loadModel(e.item, { raw: true }))
+  },
 
   imageUrl: (item) => blobUrl(byId.get(item.id)!.path),
 

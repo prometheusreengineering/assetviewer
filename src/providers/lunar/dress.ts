@@ -1,7 +1,7 @@
 import { Box3, Group, Matrix4, Vector3, type Object3D } from 'three'
 import type { Player } from '../../three/player'
-import type { DownloadFile, LoadedModel } from '../types'
-import type { EmoteDef, EmotesJson, LunarEntry } from './catalog'
+import type { CosmeticItem, DownloadFile, LoadedModel } from '../types'
+import type { EmoteDef, EmotesJson } from './catalog'
 import { emoteEffects, emoteTimeline, findAction, newPlayer } from './emotes'
 
 type HashOf = (rel: string) => string
@@ -16,6 +16,15 @@ const BIPED: Record<string, string> = {
   LeftLeg: 'left_leg',
   RightItem: 'right_arm',
   LeftItem: 'left_arm',
+}
+// Dawn (GeckoLib) anchor bones -> the same armature bones.
+const ANCHOR: Record<string, string> = {
+  head: 'head',
+  body: 'low_body',
+  rightarm: 'right_arm',
+  leftarm: 'left_arm',
+  rightleg: 'right_leg',
+  leftleg: 'left_leg',
 }
 const OTHER_SIDE: Record<string, string> = { right_arm: 'left_arm', left_arm: 'right_arm', right_leg: 'left_leg', left_leg: 'right_leg' }
 /** Older OBJ models (legacy hats/bodywear) are placed around these points (blocks). */
@@ -65,8 +74,14 @@ export function socket(bone: Object3D, obj: Object3D, part?: string, parentWorld
   holder.updateMatrixWorld(true)
 }
 
+/** What dressing needs to know about a worn item (Lunar catalog entries and Dawn entries both fit). */
+export interface Wearable {
+  kind: string
+  item: CosmeticItem
+}
+
 /** Adds a raw (player-space) cosmetic to the player so its biped parts follow the player's bones. */
-function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntry) {
+function attach(player: Player, scene: Group, object: Object3D, entry: Wearable) {
   const bone = (name: string) => player.skel.bones.get(name)!
   scene.add(object)
   if (entry.kind === 'obj') {
@@ -102,8 +117,9 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
     // armorX bones normally sit under bipedX; some models reference one they don't define (a sword under
     // "armorRightArm"), which leaves the bone at the root.
     const m = /^biped(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg|RightItem|LeftItem)/.exec(o.name) ?? /^(?:biped|armor)(Head|Body|RightArm|LeftArm|RightLeg|LeftLeg)/.exec(o.userData.missingParent ?? '')
-    if (!m) return
-    let target = BIPED[m[1]!]!
+    const a = m ? undefined : /^anchor_(head|body|rightarm|leftarm|rightleg|leftleg)$/i.exec(o.name)
+    if (!m && !a) return
+    let target = m ? BIPED[m[1]!]! : ANCHOR[a![1]!.toLowerCase()]!
     // Some models mirror their left/right pivots; follow the limb on the same side.
     const other = OTHER_SIDE[target]
     if (other) {
@@ -122,16 +138,21 @@ function attach(player: Player, scene: Group, object: Object3D, entry: LunarEntr
     object.rotation.x = -Math.PI / 2
     scene.updateMatrixWorld(true)
     socket(bone('right_arm'), object)
+  } else if (attached === 'LEFT_HAND') {
+    // Shields (a guess at the pose): upright in the left hand, the face forward.
+    object.position.set(0.45, 0.2, 0.2)
+    scene.updateMatrixWorld(true)
+    socket(bone('left_arm'), object)
   } else if (attached === 'HEAD') socket(bone('head'), object, 'head')
   else if (attached === 'SHOULDER') socket(bone('low_body'), object)
 }
 
-export async function dressPlayer(
-  entries: LunarEntry[],
+export async function dressPlayer<E extends Wearable>(
+  entries: E[],
   emote: EmoteDef | undefined,
   data: EmotesJson | undefined,
   hashOf: HashOf,
-  loadRaw: (e: LunarEntry) => Promise<LoadedModel>,
+  loadRaw: (e: E) => Promise<LoadedModel>,
 ): Promise<LoadedModel> {
   const [player, models, found] = await Promise.all([
     newPlayer(hashOf),
