@@ -10,7 +10,7 @@ const pop = ref<InstanceType<typeof Popover>>()
 const options = [
   { id: 'lunar', label: 'Lunar Client', desc: 'Cosmetics, emotes and resources from the Lunar CDN', icon: 'pi pi-moon' },
   { id: 'dawn', label: 'Dawn Client', desc: 'Cosmetics from the Dawn asset CDN', icon: 'pi pi-sun' },
-  { id: 'essential', label: 'Essential', desc: 'Essential Mod cosmetics (coming soon)', icon: 'pi pi-box' },
+  { id: 'essential', label: 'Essential', desc: 'Essential Mod cosmetics from your own files', icon: 'pi pi-box' },
 ]
 const current = computed(() => options.find((o) => o.id === props.provider) ?? options[0]!)
 function pick(id: string) {

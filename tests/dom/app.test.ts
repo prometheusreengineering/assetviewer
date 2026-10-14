@@ -68,10 +68,11 @@ describe('app shell', () => {
     expect($('.foot a')!.getAttribute('href')).toBe('https://github.com/prometheusreengineering/assetviewer')
   })
 
-  it('essential is a coming-soon page', async () => {
+  it('essential asks for the folder of the viewer first', async () => {
     await open('/essential')
-    expect($('.center h2')!.textContent).toBe('Essential is coming soon')
-    expect(document.title).toBe('Essential · Asset Viewer')
+    expect($('.setup h1')!.textContent).toBe('Essential cosmetics from your own files')
+    expect($('.setup')!.textContent).toContain('Nothing is uploaded')
+    expect($('.foot .stats')!.textContent!.trim()).toBe('')
   })
 
   it('old all-files links redirect to everything', async () => {

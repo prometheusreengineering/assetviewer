@@ -25,6 +25,19 @@ export interface AnimFile {
   animations: Record<string, Animation>
 }
 
+/**
+ * GeckoLib/Blockbench name animations `animation.<model>.<state>`; the player and the modal use the state.
+ * `null` is GeckoLib's empty "stop" animation (the rest pose), not worth a menu entry.
+ */
+export function normalizeAnims(file: AnimFile): AnimFile {
+  const animations: AnimFile['animations'] = {}
+  for (const [k, v] of Object.entries(file.animations ?? {})) {
+    const state = k.split('.').pop()!
+    if (state !== 'null' && !(state in animations)) animations[state] = v
+  }
+  return { ...file, animations }
+}
+
 type Vec3 = (s: Scope) => [number, number, number]
 
 interface Track {

@@ -2,7 +2,7 @@ import { Group, type Object3D } from 'three'
 import { getUrlBuffer } from '../../cdn'
 import { fetchImageSize } from '../../dimensions'
 import { decodeFrames, mimeOf } from '../../three/animatedImage'
-import type { AnimFile } from '../../three/animation/bedrockAnim'
+import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim'
 import type { FnLib } from '../../three/animation/molang'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
@@ -12,6 +12,7 @@ import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
 import { DAWN_CATEGORIES, DAWN_RESOURCES, dawnUrl, loadDawnCatalog, type DawnCatalog, type DawnEntry } from './catalog'
 
+export { normalizeAnims }
 export const EVERYTHING = 'everything'
 export const OUTFIT = 'outfit'
 const KIND_LABELS: Record<string, string> = { geo: 'Model', variant: 'Colour variant', cloak: 'Cloak', shield: 'Flat shield', trim: 'Armor trim', image: 'Image', file: 'File' }
@@ -37,19 +38,6 @@ async function fetchBuf(path: string) {
   return buf
 }
 const fetchJson = async <T>(path: string) => JSON.parse(new TextDecoder().decode(await fetchBuf(path))) as T
-
-/**
- * GeckoLib names animations `animation.<model>.<state>`; the player and the modal use the state. `null` is
- * GeckoLib's empty "stop" animation (the rest pose), not worth a menu entry.
- */
-export function normalizeAnims(file: AnimFile): AnimFile {
-  const animations: AnimFile['animations'] = {}
-  for (const [k, v] of Object.entries(file.animations ?? {})) {
-    const state = k.split('.').pop()!
-    if (state !== 'null' && !(state in animations)) animations[state] = v
-  }
-  return { ...file, animations }
-}
 
 /** Several rigs (an armor trim's slot pieces) as one model. */
 function combine(models: LoadedModel[], object: Object3D): LoadedModel {

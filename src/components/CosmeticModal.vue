@@ -34,6 +34,9 @@ const error = ref('')
 const hasModel = ref(false)
 const states = ref<string[]>([])
 const state = ref('')
+// Colour variants (Essential)
+const variants = ref<string[]>([])
+const variant = ref('')
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
@@ -41,7 +44,7 @@ const isEmote = computed(() => shown.value?.category === 'emotes')
 // Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
 const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
 // Second row: animation, show-on-player (+ what it reveals), or an emote's skin and play controls.
-const hasRow2 = computed(() => states.value.length > 1 || canDress.value || !!timeline.value)
+const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || canDress.value || !!timeline.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
 const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
@@ -74,6 +77,8 @@ function teardown() {
   raw.value = undefined
   states.value = []
   state.value = ''
+  variants.value = []
+  variant.value = ''
   timeline.value = undefined
   tlTime.value = 0
   playing.value = true
@@ -117,6 +122,8 @@ async function open(item: CosmeticItem) {
     states.value = loaded.states
     timeline.value = loaded.timeline
     state.value = loaded.state
+    variants.value = loaded.variants ?? []
+    variant.value = loaded.variant ?? ''
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 2.2))
     const key = new DirectionalLight(0xffffff, 1.4)
@@ -188,6 +195,7 @@ const applyWireframe = (w: boolean) =>
   })
 watch(wireframe, applyWireframe)
 watch(state, (s) => model?.setState(s))
+watch(variant, (v) => v && model?.variant !== v && model?.setVariant?.(v))
 // The header's player name changed: redraw anything wearing the skin.
 watch(skinName, () => usesSkin.value && shown.value && open(shown.value))
 watch(freeRotate, (f) => swapControls?.(f))
@@ -306,9 +314,10 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         </div>
         <div v-if="hasRow2" class="row">
           <Select v-if="states.some((s) => s !== 'idle' && s !== 'main')" v-model="state" :options="states" size="small" placeholder="Animation" />
+          <Select v-if="variants.length > 1" v-model="variant" :options="variants" size="small" placeholder="Colour" title="Colour variant" class="variant" />
           <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
           <Select
-            v-if="dressed"
+            v-if="dressed && emoteOptions.length"
             v-model="playerEmoteId"
             :options="emoteOptions"
             option-label="label"

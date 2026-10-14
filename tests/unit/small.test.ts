@@ -77,16 +77,15 @@ describe('config and providers', () => {
     expect(providers.essential).toBe(essentialProvider)
     for (const [id, p] of Object.entries(providers)) expect(p.id).toBe(id)
   })
-  it('essential is an unavailable stub', async () => {
+  it('essential needs the files of the viewer before it has anything', async () => {
     const p = essentialProvider
-    expect(p.available).toBe(false)
+    expect(p.available).toBe(true)
     expect(p.name).toBe('Essential')
     await expect(p.load()).resolves.toBeUndefined()
+    expect(p.setup!.needed()).toBe(true)
     expect(p.categories()).toEqual([])
-    expect(p.fields('x')).toEqual([])
-    expect(p.items('x')).toEqual([])
+    expect(p.items('everything')).toEqual([])
     const it1 = { id: 'a', name: 'a', category: 'x', fields: {}, render: '3d' as const }
-    await expect(p.imageUrl(it1)).rejects.toThrow(/not supported/)
-    await expect(p.loadModel(it1)).rejects.toThrow(/not supported/)
+    await expect(p.loadModel(it1)).rejects.toThrow(/Unknown item/)
   })
 })

@@ -16,7 +16,7 @@ const about = computed(() => (providers[String(route.params.provider)] ?? provid
       <div class="sec text"><template v-if="about">Not affiliated with {{ about.owner }}. Assets are served from {{ about.host }}.</template></div>
       <div class="sec stats">
         <template v-if="stats">
-          {{ stats.name }}: {{ stats.items.toLocaleString() }} items · {{ stats.files.toLocaleString() }} files · index
+          {{ stats.name }}: {{ stats.items.toLocaleString() }} items · {{ stats.files.toLocaleString() }} files<template v-if="stats.indexes.length"> · index</template>
           <code v-for="h in stats.indexes" :key="h" :title="h">{{ h.slice(0, 7) }}</code>
         </template>
       </div>

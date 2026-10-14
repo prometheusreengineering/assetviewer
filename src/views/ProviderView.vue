@@ -11,6 +11,7 @@ import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { autoRotate } from '../viewPrefs'
 import HomeView from '../components/HomeView.vue'
+import EssentialSetup from '../components/EssentialSetup.vue'
 import ProviderSwitch from '../components/ProviderSwitch.vue'
 import SideControls from '../components/SideControls.vue'
 import OutfitBuilder from '../components/OutfitBuilder.vue'
@@ -32,16 +33,21 @@ const provider = computed(() => providers[props.provider]!)
 const ready = ref(false)
 const error = ref('')
 const categories = ref<CategoryDef[]>([])
+// Bumped when a provider's data source changes (Essential: the viewer connected their folder).
+const reloadKey = ref(0)
+const needsSetup = ref(false)
 
 watchEffect(async () => {
+  void reloadKey.value
   ready.value = false
   error.value = ''
   if (!provider.value.available) return
   try {
     await provider.value.load()
+    needsSetup.value = !!provider.value.setup?.needed()
     categories.value = provider.value.categories()
     const st = provider.value.stats?.()
-    if (st) stats.value = { name: provider.value.name, ...st }
+    stats.value = st && !needsSetup.value ? { name: provider.value.name, ...st } : undefined
     ready.value = true
     if (props.category === 'all-files') return void router.replace(`/${props.provider}/everything`)
     if (!props.category) router.replace(`/${props.provider}/home`)
@@ -347,6 +353,7 @@ const menuModel = computed(() => {
       </div>
       <Message v-else-if="error" severity="error" class="m">{{ error }}</Message>
       <div v-else-if="!ready" class="center"><ProgressSpinner /></div>
+      <EssentialSetup v-else-if="needsSetup" @connected="reloadKey++" />
       <template v-else>
       <HomeView v-if="isHome" :provider="provider" />
       <OutfitBuilder v-else-if="isOutfit" :provider="provider" />

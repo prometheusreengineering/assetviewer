@@ -55,6 +55,10 @@ export interface LoadedModel {
   setState: (state: string) => void
   /** Playback control for timed animations (emotes); times in seconds. */
   timeline?: Timeline
+  /** Colour variants (Essential); the first is the default. */
+  variants?: string[]
+  variant?: string
+  setVariant?: (variant: string) => Promise<void>
   dispose: () => void
 }
 
@@ -88,6 +92,8 @@ export interface CosmeticProvider {
   available: boolean
   /** Where the assets are served from and who owns them (footer and home page). */
   about?: { host: string; owner: string; credits?: string[] }
+  /** The viewer supplies the data (Essential: their own files); while `needed()`, a setup panel replaces the page. */
+  setup?: { needed(): boolean }
   load(): Promise<void>
   categories(): CategoryDef[]
   fields(category: string): FieldDef[]
