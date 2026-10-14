@@ -35,7 +35,7 @@ describe('sources', () => {
 
   it('reads every dump and skips broken files', async () => {
     const dumps = await readDumps(memorySource(essentialFixture().dumps))
-    expect(dumps.map((d) => (d as { a: string }).a).sort()).toEqual(['TEST_DANCE', 'TEST_HAT', 'TEST_TOP', 'TEST_WINGS'])
+    expect(dumps.map((d) => (d as { a: string }).a).sort()).toEqual(['TEST_BRACELET', 'TEST_DANCE', 'TEST_HAT', 'TEST_TOP', 'TEST_WINGS'])
   })
 
   it('a listing source is what <input webkitdirectory> builds on', async () => {
@@ -74,14 +74,14 @@ describe('catalog', () => {
 
   it('items with names, categories and filter fields', async () => {
     const c = await build()
-    expect(c.entries.map((e) => e.item.name)).toEqual(['Test Dance', 'Test Hat', 'Test Top', 'Test Wings'])
+    expect(c.entries.map((e) => e.item.name)).toEqual(['Test Bracelet', 'Test Dance', 'Test Hat', 'Test Top', 'Test Wings'])
     const hat = c.entries.find((e) => e.item.id === 'TEST_HAT')!
     expect(hat.item).toMatchObject({ category: 'hat', render: '3d', thumb: undefined })
     expect(hat.item.fields).toMatchObject({ category: 'Hats', rarity: 'Rare', price: 600, themes: ['Spring'], collections: ['January 2026'], flags: ['Previously Unpopular'], slots: ['Hat'], variants: ['blue', 'red'], hasAnimation: true, files: 5 })
     expect(hat).toMatchObject({ geometry: 'geometry.steve.json', animations: 'animations.json', settings: 'settings.json' })
     // no name: the id, humanized
     expect(c.entries.find((e) => e.item.id === 'TEST_TOP')!.item.name).toBe('Test Top')
-    expect(c.files).toBe(5 + 4 + 2 + 2)
+    expect(c.files).toBe(5 + 4 + 2 + 2 + 5)
     const wings = c.entries.find((e) => e.item.id === 'TEST_WINGS')!
     expect(wings.textures).toEqual([{ name: 'default', path: 'texture.png', emissive: 'emissive.png' }])
     expect(wings.skinMask).toEqual({ steve: 'skin_mask.steve.png', alex: undefined })

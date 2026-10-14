@@ -26,6 +26,13 @@ export const TOP_GEO = geo([
   { name: 'arm_right', parent: 'root', pivot: [-5, 22, 0], cubes: [{ origin: [-8, 12, -2], size: [4, 12, 4], uv: [40, 16] }] },
   { name: 'arm_left', parent: 'root', pivot: [5, 22, 0], cubes: [{ origin: [4, 12, -2], size: [4, 12, 4], uv: [32, 48] }] },
 ])
+export const BRACELET_GEO = geo([
+  { name: 'root', pivot: [0, 0, 0] },
+  { name: 'arm_right', parent: 'root', pivot: [-5, 22, 0] },
+  { name: 'side_right', parent: 'arm_right', pivot: [-5, 22, 0], cubes: [{ origin: [-8.5, 13, -2.5], size: [5, 2, 5], uv: [0, 0] }] },
+  { name: 'arm_left', parent: 'root', pivot: [5, 22, 0] },
+  { name: 'side_left', parent: 'arm_left', pivot: [5, 22, 0], cubes: [{ origin: [3.5, 13, -2.5], size: [5, 2, 5], uv: [0, 8] }] },
+])
 export const HAT_ANIM = {
   format_version: '1.8.0',
   animations: {
@@ -83,6 +90,19 @@ const DEFS: Def[] = [
     files: { 'geometry.steve.json': TOP_GEO, 'texture.png': png(64, 64) },
     // its texture is only on the "CDN"
     remote: ['texture.png'],
+  },
+  {
+    id: 'TEST_BRACELET',
+    category: 'ARMS',
+    name: 'Test Bracelet',
+    files: {
+      'geometry.steve.json': BRACELET_GEO,
+      'texture.png': png(32, 32).map((b, i) => (i === 42 ? 5 : b)),
+      'skin_mask.steve.left.png': png(64, 64).map((b, i) => (i === 42 ? 6 : b)),
+      'skin_mask.steve.right.png': png(64, 64).map((b, i) => (i === 42 ? 7 : b)),
+      // hidden under the test top's... body (COSMETIC_BONE_HIDING: this bracelet's arms hide when TEST_TOP is worn)
+      'settings.json': [{ type: 'COSMETIC_BONE_HIDING', id: 'TEST_TOP', enabled: true, data: { arms: true } }, { type: 'EXTERNAL_HIDDEN_BONE', id: 'TEST_WINGS', enabled: true, data: { wing_left: true } }],
+    },
   },
   { id: 'TEST_DANCE', category: 'EMOTE', name: 'Test Dance', files: { 'geometry.steve.json': geo([{ name: 'root', pivot: [0, 0, 0] }]), 'animations.json': { animations: {} } } },
 ]

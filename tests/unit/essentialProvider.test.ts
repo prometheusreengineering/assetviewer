@@ -36,17 +36,18 @@ afterAll(() => vi.unstubAllGlobals())
 
 describe('connected catalog', () => {
   it('state, categories (emotes are not outfit slots) and stats', () => {
-    expect(essentialState.value).toMatchObject({ connected: true, items: 4 })
+    expect(essentialState.value).toMatchObject({ connected: true, items: 5 })
     expect(ep.setup!.needed()).toBe(false)
     expect(ep.categories().map((c) => [c.id, c.count, c.group])).toEqual([
-      ['everything', 4, ''],
+      ['everything', 5, ''],
       ['hat', 1, 'Cosmetics (3D)'],
       ['top', 1, 'Cosmetics (3D)'],
+      ['arms', 1, 'Cosmetics (3D)'],
       ['wings', 1, 'Cosmetics (3D)'],
       ['emote', 1, 'Emotes & effects'],
-      ['outfit', 3, 'Tools'],
+      ['outfit', 4, 'Tools'],
     ])
-    expect(ep.stats!()).toEqual({ items: 4, files: 13, indexes: [] })
+    expect(ep.stats!()).toEqual({ items: 5, files: 18, indexes: [] })
   })
 
   it('fields and info', () => {
@@ -60,7 +61,7 @@ describe('connected catalog', () => {
     await expect(connect({})).rejects.toThrow(/No Essential dumps/)
     await expect(connect({ dumps: memorySource({}) })).rejects.toThrow(/no cosmetics/)
     // the previous connection is kept
-    expect(ep.items('everything')).toHaveLength(4)
+    expect(ep.items('everything')).toHaveLength(5)
   })
 })
 
@@ -118,6 +119,23 @@ describe('models', () => {
     expect((await ep.loadModel(item('TEST_WINGS'))).object.userData.skinMask).toBeUndefined()
   })
 
+  it('one-sided cosmetics show the default side (right) and switch sides', async () => {
+    const m = await ep.loadModel(item('TEST_BRACELET'))
+    expect(m.sides).toEqual(['left', 'right'])
+    expect(m.side).toBe('right')
+    const shown = () => {
+      const out: string[] = []
+      m.object.traverse((o) => void (/^side_/.test(o.name) && o.visible && out.push(o.name)))
+      return out
+    }
+    expect(shown()).toEqual(['side_right'])
+    m.setSide!('left')
+    expect([m.side, shown()]).toEqual(['left', ['side_left']])
+    // raw: the side's own skin mask
+    const raw = await ep.loadModel(item('TEST_BRACELET'), { raw: true })
+    expect((raw.object.userData.skinMask as ImageBitmap).width).toBe(64)
+  })
+
   it('player space keeps blocks and mirrors on z', async () => {
     const m = await ep.loadModel(item('TEST_WINGS'), { raw: true })
     let mirrored = 0
@@ -138,6 +156,25 @@ describe('models', () => {
 })
 
 describe('dressPlayer', () => {
+  it('settings rules hide bones of cosmetics worn together', async () => {
+    const m = await ep.dressPlayer!([item('TEST_BRACELET'), item('TEST_TOP'), item('TEST_WINGS')])
+    const visible = (name: string) => {
+      const out: boolean[] = []
+      m.object.traverse((o) => void (o.name === name && out.push(o.visible)))
+      return out
+    }
+    // the bracelet's arms hide under the top (COSMETIC_BONE_HIDING); it hides the wings' left wing (EXTERNAL_HIDDEN_BONE)
+    expect(visible('wing_left')).toEqual([false])
+    expect(visible('wing_right')).toEqual([true])
+    expect(visible('side_right')).toEqual([true])
+    m.dispose()
+    const alone = await ep.dressPlayer!([item('TEST_BRACELET'), item('TEST_WINGS')])
+    let leftWing = true
+    alone.object.traverse((o) => void (o.name === 'wing_left' && (leftWing = o.visible)))
+    expect(leftWing).toBe(false)
+    alone.dispose()
+  })
+
   it("socket Essential parts under root to the player's bones; emotes aren't worn", async () => {
     const m = await ep.dressPlayer!([item('TEST_HAT'), item('TEST_TOP'), item('TEST_WINGS'), item('TEST_DANCE')])
     m.object.updateMatrixWorld(true)

@@ -37,6 +37,9 @@ const state = ref('')
 // Colour variants (Essential)
 const variants = ref<string[]>([])
 const variant = ref('')
+// One-sided cosmetics (Essential)
+const sides = ref<string[]>([])
+const side = ref('')
 const timeline = shallowRef<Timeline>()
 const tlTime = ref(0)
 const playing = ref(true)
@@ -44,7 +47,7 @@ const isEmote = computed(() => shown.value?.category === 'emotes')
 // Wearable on the player: 3D cosmetics (not emotes) when the provider can dress a player.
 const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.render === '3d' && !isEmote.value)
 // Second row: animation, show-on-player (+ what it reveals), or an emote's skin and play controls.
-const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || canDress.value || !!timeline.value)
+const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || sides.value.length > 1 || canDress.value || !!timeline.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
 const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
@@ -79,6 +82,8 @@ function teardown() {
   state.value = ''
   variants.value = []
   variant.value = ''
+  sides.value = []
+  side.value = ''
   timeline.value = undefined
   tlTime.value = 0
   playing.value = true
@@ -124,6 +129,8 @@ async function open(item: CosmeticItem) {
     state.value = loaded.state
     variants.value = loaded.variants ?? []
     variant.value = loaded.variant ?? ''
+    sides.value = loaded.sides ?? []
+    side.value = loaded.side ?? ''
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 2.2))
     const key = new DirectionalLight(0xffffff, 1.4)
@@ -196,6 +203,7 @@ const applyWireframe = (w: boolean) =>
 watch(wireframe, applyWireframe)
 watch(state, (s) => model?.setState(s))
 watch(variant, (v) => v && model?.variant !== v && model?.setVariant?.(v))
+watch(side, (s) => s && model?.side !== s && model?.setSide?.(s))
 // The header's player name changed: redraw anything wearing the skin.
 watch(skinName, () => usesSkin.value && shown.value && open(shown.value))
 watch(freeRotate, (f) => swapControls?.(f))
@@ -315,6 +323,7 @@ const imageName = () => `${slug()}.${(props.item?.fields.ext as string) || 'webp
         <div v-if="hasRow2" class="row">
           <Select v-if="states.some((s) => s !== 'idle' && s !== 'main')" v-model="state" :options="states" size="small" placeholder="Animation" />
           <Select v-if="variants.length > 1" v-model="variant" :options="variants" size="small" placeholder="Colour" title="Colour variant" class="variant" />
+          <Select v-if="sides.length > 1" v-model="side" :options="sides" size="small" placeholder="Side" title="Side it is worn on" class="side" />
           <label v-if="canDress"><ToggleSwitch v-model="showOnPlayer" /> Show on player</label>
           <Select
             v-if="dressed && emoteOptions.length"

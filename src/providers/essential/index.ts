@@ -12,6 +12,7 @@ import { lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, LoadedModel } from '../types'
 import { buildEssentialCatalog, categoryId, ESSENTIAL_CATEGORIES, orderVariants, type EssentialCatalog, type EssentialEntry } from './catalog'
+import { boneSide, defaultSide, hiddenBones, sidesOf } from './rules'
 import { assetBytes, filesSource, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
 
 export const EVERYTHING = 'everything'
@@ -137,11 +138,27 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
   glow?.sync(rig.material.map!)
   const object = new Group()
   object.add(model.object)
-  // Raw (on a player): the skin mask hides skin pixels under the cosmetic; dressPlayer combines the worn ones.
-  if (raw && e.skinMask?.steve) {
-    object.userData.skinMask = await bytes(e, e.skinMask.steve)
-      .then((b) => createImageBitmap(new Blob([b], { type: 'image/png' })))
-      .catch(() => undefined)
+  // One-sided cosmetics: bones tagged side_left/side_right/... show only for the chosen side.
+  const sides = sidesOf(rig.bones?.keys() ?? [], e.files.keys())
+  let side = defaultSide(sides, settings)
+  const applySide = () => {
+    for (const [name, b] of rig.bones ?? []) {
+      const s = boneSide(name)
+      if (s) b.group.visible = s === side
+    }
+  }
+  applySide()
+  // Raw (on a player): the skin mask hides skin pixels under the cosmetic (per side when it has sides);
+  // dressPlayer combines the worn ones and applies the settings' hiding rules through the bones.
+  if (raw) {
+    const sideMask = side && e.files.has(`skin_mask.steve.${side}.png`) ? `skin_mask.steve.${side}.png` : undefined
+    const maskPath = sideMask ?? e.skinMask?.steve
+    if (maskPath) {
+      object.userData.skinMask = await bytes(e, maskPath)
+        .then((b) => createImageBitmap(new Blob([b], { type: 'image/png' })))
+        .catch(() => undefined)
+    }
+    object.userData.essential = { id: e.item.id, settings, bones: rig.bones }
   }
   const out: LoadedModel = {
     ...model,
@@ -166,6 +183,16 @@ async function loadModel(e: EssentialEntry, raw: boolean): Promise<LoadedModel> 
     } catch {}
   }
   out.files = files
+  if (sides.length > 1) {
+    out.sides = sides
+    out.side = side
+    out.setSide = (s) => {
+      if (!sides.includes(s as never)) return
+      side = s as typeof side
+      out.side = s
+      applySide()
+    }
+  }
   if (textures.length > 1) {
     out.variants = textures.map((t) => t.name)
     out.variant = textures[0]!.name
@@ -242,7 +269,23 @@ export const essentialProvider: CosmeticProvider = {
     // The player body and skin are Lunar's (its CDN has the emote armature), like Dawn's outfits.
     const hashOf = await lunarHashOf()
     const worn = items.map((it) => byId.get(it.id)).filter((e): e is EssentialEntry => !!e && !e.item.thumb).map((e) => ({ kind: 'essential', item: e.item }))
-    return dressPlayer(worn, undefined, undefined, hashOf, (w) => essentialProvider.loadModel(w.item, { raw: true }))
+    const loaded: LoadedModel[] = []
+    const dressed = await dressPlayer(worn, undefined, undefined, hashOf, async (w) => {
+      const m = await essentialProvider.loadModel(w.item, { raw: true })
+      loaded.push(m)
+      return m
+    })
+    // settings.json rules between the worn cosmetics (bones keep their identity after being socketed).
+    type Info = { id: string; settings: unknown; bones?: Map<string, { group: { visible: boolean } }> }
+    const infos = loaded.map((m) => m.object.userData.essential as Info | undefined).filter((x): x is Info => !!x)
+    for (const [id, names] of hiddenBones(infos)) {
+      const bones = infos.find((i) => i.id === id)?.bones
+      for (const n of names) {
+        const b = bones?.get(n)
+        if (b) b.group.visible = false
+      }
+    }
+    return dressed
   },
 
   imageUrl: () => Promise.reject(new Error('Essential items are 3D models')),

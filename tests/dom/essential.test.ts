@@ -37,7 +37,7 @@ describe('Essential setup', () => {
     FakeIntersectionObserver.intersectAll()
     await settle(20)
     expect($$('.card .name').map((e) => e.textContent)).toEqual(['Test Hat'])
-    expect($('.foot')!.textContent).toContain('Essential: 4 items · 13 files')
+    expect($('.foot')!.textContent).toContain('Essential: 5 items · 18 files')
     expect($('.foot')!.textContent).not.toContain('index')
   })
 
@@ -60,7 +60,7 @@ describe('Essential setup', () => {
     pick(dumpsInput!, 'dumps', fx.dumps)
     pick(cacheInput!, 'cosmetic-cache', fx.cache)
     await settle()
-    expect($('.setup .picked')!.textContent).toContain('5 files')
+    expect($('.setup .picked')!.textContent).toContain('6 files')
     byText('Show my cosmetics', 'button')!.click()
     await settle(40)
     expect($('.setup')).toBeNull()

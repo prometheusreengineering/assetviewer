@@ -59,6 +59,10 @@ export interface LoadedModel {
   variants?: string[]
   variant?: string
   setVariant?: (variant: string) => Promise<void>
+  /** Sides a one-sided cosmetic can be worn on (Essential: left/right, front/back). */
+  sides?: string[]
+  side?: string
+  setSide?: (side: string) => void
   dispose: () => void
 }
 
