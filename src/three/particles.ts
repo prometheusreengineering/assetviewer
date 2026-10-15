@@ -9,6 +9,7 @@ import {
   Matrix4,
   Mesh,
   ShaderMaterial,
+  type Object3D,
   Texture,
   Vector3,
 } from 'three'
@@ -114,16 +115,46 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`
 const FRAG = `
-uniform sampler2D map;
+uniform sampler2D map; uniform float light;
 varying vec2 vUv; varying vec4 vColor;
 void main() {
   vec4 t = texture2D(map, vUv);
   gl_FragColor = t * vColor;
+  gl_FragColor.rgb *= light;
   if (gl_FragColor.a < 0.02) discard;
   #include <colorspace_fragment>
 }`
 
 const _ev = new Vector3()
+const _cam = new Vector3()
+const _at = new Vector3()
+const _dir = new Vector3()
+
+/**
+ * How bright the scene's own lights make a white Lambert surface facing the camera at `at` (three's Lambert:
+ * (ambient + sum of key * cos) / pi, capped at 1). `minecraft:particle_appearance_lighting` particles take
+ * this on, the way Bedrock shades them by the light level where they are; there is no world light here, so
+ * the viewer's lights stand in for it. A scene without lights leaves particles full-bright.
+ */
+export function sceneLight(scene: Object3D, camera: Vector3, at: Vector3): number {
+  let sum = 0
+  let lights = 0
+  const toCamera = _dir.subVectors(camera, at).normalize()
+  for (const o of scene.children) {
+    const l = o as Object3D & { isAmbientLight?: boolean; isDirectionalLight?: boolean; intensity: number; color: Color; target?: Object3D }
+    if (!l.visible) continue
+    const level = l.intensity * (l.color ? (l.color.r + l.color.g + l.color.b) / 3 : 1)
+    if (l.isAmbientLight) {
+      sum += level
+      lights++
+    } else if (l.isDirectionalLight) {
+      const from = _ev.setFromMatrixPosition(l.matrixWorld).sub(_at.setFromMatrixPosition(l.target!.matrixWorld)).normalize()
+      sum += level * Math.max(0, from.dot(toCamera))
+      lights++
+    }
+  }
+  return lights ? Math.min(1, sum / Math.PI) : 1
+}
 
 /** Effect ids an event starts (a `particle_effect`, or a `sequence`/`randomize` of them). */
 export function eventEffects(events: unknown, name: unknown): string[] {
@@ -314,13 +345,18 @@ export class Emitter {
 
     this.buildGeometry()
     const mat = new ShaderMaterial({
-      uniforms: { map: { value: texture ?? null } },
+      uniforms: { map: { value: texture ?? null }, light: { value: 1 } },
       vertexShader: VERT,
       fragmentShader: FRAG,
       transparent: true,
       depthWrite: false,
     })
     this.object.material = mat
+    if (c['minecraft:particle_appearance_lighting']) {
+      this.object.onBeforeRender = (_r, scene, camera) => {
+        mat.uniforms.light!.value = sceneLight(scene, _cam.setFromMatrixPosition(camera.matrixWorld), this.object.getWorldPosition(_at))
+      }
+    }
     this.object.frustumCulled = false
     this.object.renderOrder = 10
     this.reset()

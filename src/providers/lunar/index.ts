@@ -4,6 +4,7 @@ import { fileUrl, getFileBuffer, getFileJson, getFileText } from '../../cdn'
 import type { AnimFile } from '../../three/animation/bedrockAnim'
 import { parseFunctions, type FnLib } from '../../three/animation/molang'
 import { fitObject } from '../../three/fit'
+import { armHeld, type Display } from '../../three/held'
 import { buildRig, finish, stackedFrames, type Rig } from '../../three/rig'
 import { createMaterial, createTexture, type GeoFile } from '../../three/geoModel'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
@@ -167,6 +168,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false, slim = false): Pr
     texture?: string
     animation?: string
     attached_bone?: string
+    item_transformation?: Record<string, string>
     hide_head?: boolean
     hide_body?: boolean
     hide_right_arm?: boolean
@@ -193,6 +195,9 @@ async function loadGek(entry: LunarEntry, playerSpace = false, slim = false): Pr
     ...(texKnown ? [{ name: baseName(gek.texture), data: new Uint8Array(texBuf) }] : []),
   ]
   if (file) files.push(file)
+  // Held items (the wand) ship a Java item `display` transform for the hand.
+  const transformPath = playerSpace ? Object.keys(raw.item_transformation ?? {})[0] : undefined
+  const display = transformPath && catalog!.files.has(PREFIX + stripNs(transformPath)) ? await getFileJson<{ display?: Record<string, Display> }>(hashOf(transformPath)).then((j) => j.display?.thirdperson_righthand, () => undefined) : undefined
   // Default pose: idle, else whatever the state machine plays unconditionally (plays_when "1"), e.g. auras' "main".
   const states = (raw.state_machine?.controllers ?? []).flatMap((c) => c.states ?? [])
   const preferred = ['idle', ...states.filter((x) => String(x.plays_when).trim() === '1').map((x) => x.anim), 'main']
@@ -208,6 +213,7 @@ async function loadGek(entry: LunarEntry, playerSpace = false, slim = false): Pr
         if (t.transformType === 'rotate' && v.angle) root.quaternion.multiply(new Quaternion().setFromAxisAngle(new Vector3(v.x ?? 0, v.y ?? 0, v.z ?? 0).normalize(), v.angle * DEG))
       }
       root.userData.attachedBone = raw.attached_bone
+      if (display && raw.attached_bone === 'RIGHT_ARM') root.userData.held = { hand: 'right', matrix: armHeld(display, false) }
       // Player parts this cosmetic replaces (a robotic arm hides the arm under it).
       root.userData.hideParts = (['head', 'body', 'right_arm', 'left_arm', 'right_leg', 'left_leg'] as const).filter((p) => raw[`hide_${p}`] === true)
     }, true),
@@ -216,10 +222,16 @@ async function loadGek(entry: LunarEntry, playerSpace = false, slim = false): Pr
 
 // Legacy "dragon wings" textures are ender dragon sheets (256 grid, x4): the vanilla dragon wing is a 56-long
 // bone at uv 112,88 with a 56x56 membrane at -56,88, then a wing tip (bone 112,136, membrane -56,144).
-// Built at WING_S scale on the upper back, Bedrock convention (back = +z, the player's right = -x).
-const WING_S = 0.2
+// Posed like the classic dragon-wing cosmetic that 1.8 clients share (a 10 px wing = the dragon's at 10/56):
+// hinged 2 px either side of the spine, 1.45 blocks up and 0.2 behind, rotated X -80, Y 20, Z 20 degrees.
+// Java (x, y, z) px in that frame is (x, 23.2 - y, 3.2 + z) here, and a Java rotation [x, y, z] is [x, -y, z]
+// (Bedrock convention: back = +z, the player's right = -x); the left wing is the mirror image.
+const WING_S = 10 / 56
+const WING_Y = 23.2
+const WING_Z = 3.2
 export function dragonWingGeo(): GeoFile {
   const L = 56 * WING_S
+  const s = WING_S
   type Uv = Record<string, { uv: [number, number]; uv_size: [number, number] }>
   const box = (u: number, v: number, w: number, d: number): Uv => ({
     north: { uv: [u + d, v + d], uv_size: [w, d] },
@@ -238,26 +250,27 @@ export function dragonWingGeo(): GeoFile {
       : { up: { uv: [56, v + 56], uv_size: [-56, -56] }, down: { uv: [112, v], uv_size: [-56, 56] } }
   // side -1 = right wing (extends to -x), +1 = left (mirrored)
   const wing = (side: 1 | -1, name: string) => {
-    const x0 = side * 1.5
-    const at = (x: number, len: number) => (side < 0 ? x - len : x)
+    const x0 = side * 2
+    const at = (x: number) => (side < 0 ? x - L : x)
+    const tip = x0 + side * L
     return [
       {
         name: `${name}_wing`,
         parent: 'wings',
-        pivot: [x0, 23, 2.5],
-        rotation: [-75, side * -25, side * -30],
+        pivot: [x0, WING_Y, WING_Z],
+        rotation: [-80, side * 20, side * -20],
         cubes: [
-          { origin: [at(x0, L), 22.2, 1.7], size: [L, 1.6, 1.6], uv: box(112, 88, 56, 8) },
-          { origin: [at(x0, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(88, side) },
+          { origin: [at(x0), WING_Y - 4 * s, WING_Z - 4 * s], size: [L, 8 * s, 8 * s], uv: box(112, 88, 56, 8) },
+          { origin: [at(x0), WING_Y, WING_Z + 2 * s], size: [L, 0, L], inflate: 0.02, uv: skin(88, side) },
         ],
       },
       {
         name: `${name}_tip`,
         parent: `${name}_wing`,
-        pivot: [x0 + side * L, 23, 2.5],
+        pivot: [tip, WING_Y, WING_Z],
         cubes: [
-          { origin: [at(x0 + side * L, L), 22.6, 2.1], size: [L, 0.8, 0.8], uv: box(112, 136, 56, 4) },
-          { origin: [at(x0 + side * L, L), 23, 2.5], size: [L, 0, L], inflate: 0.02, uv: skin(144, side) },
+          { origin: [at(tip), WING_Y - 2 * s, WING_Z - 2 * s], size: [L, 4 * s, 4 * s], uv: box(112, 136, 56, 4) },
+          { origin: [at(tip), WING_Y, WING_Z + 2 * s], size: [L, 0, L], inflate: 0.02, uv: skin(144, side) },
         ],
       },
     ]
@@ -266,21 +279,23 @@ export function dragonWingGeo(): GeoFile {
     'minecraft:geometry': [
       {
         description: { texture_width: 256, texture_height: 256 },
-        bones: [{ name: 'wings', pivot: [0, 23, 2.5] }, ...wing(-1, 'right'), ...wing(1, 'left')],
+        bones: [{ name: 'wings', pivot: [0, WING_Y, WING_Z] }, ...wing(-1, 'right'), ...wing(1, 'left')],
       },
     ],
   } as unknown as GeoFile
 }
-// A slow flap: the wings swing back and forth while the tips fold.
+// The classic flap, once a second: X -cos(t) * 0.2 rad, Y +sin(t) * 0.4 rad, and the tip folding by
+// -(sin(t + 2 rad) + 0.5) * 0.75 rad (in degrees here; the left wing mirrors Y and the tip).
+const PHASE = 'q.life_time * 360'
 const DRAGON_WING_ANIM: AnimFile = {
   animations: {
     main: {
       loop: true,
       bones: {
-        right_wing: { rotation: ['math.cos(q.life_time * 150) * 8', 'math.sin(q.life_time * 150) * 12', 'math.sin(q.life_time * 150) * 8'] },
-        left_wing: { rotation: ['math.cos(q.life_time * 150) * 8', '-math.sin(q.life_time * 150) * 12', '-math.sin(q.life_time * 150) * 8'] },
-        right_tip: { rotation: [0, 0, '-15 + math.sin(q.life_time * 150 + 115) * 12'] },
-        left_tip: { rotation: [0, 0, '15 - math.sin(q.life_time * 150 + 115) * 12'] },
+        right_wing: { rotation: [`-math.cos(${PHASE}) * 11.459`, `-math.sin(${PHASE}) * 22.918`, 0] },
+        left_wing: { rotation: [`-math.cos(${PHASE}) * 11.459`, `math.sin(${PHASE}) * 22.918`, 0] },
+        right_tip: { rotation: [0, 0, `-(math.sin(${PHASE} + 114.592) + 0.5) * 42.972`] },
+        left_tip: { rotation: [0, 0, `(math.sin(${PHASE} + 114.592) + 0.5) * 42.972`] },
       },
     },
   },

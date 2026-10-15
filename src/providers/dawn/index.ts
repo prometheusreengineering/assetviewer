@@ -6,6 +6,7 @@ import { normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim
 import type { FnLib } from '../../three/animation/molang'
 import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
+import { SHIELD_DISPLAY, SHIELD_FILE_TO_MODEL, vanillaHeld } from '../../three/held'
 import { buildRig, finish } from '../../three/rig'
 import { CAPE_GEO, CAPE_ON_PLAYER, lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
@@ -56,11 +57,28 @@ function combine(models: LoadedModel[], object: Object3D): LoadedModel {
   }
 }
 
+/** A shield drawn in vanilla's shield model space: no anchor bones, cubes centred on x = 0 near the origin. */
+export function shieldSpace(geo: GeoFile): boolean {
+  const bones = geo['minecraft:geometry']?.[0]?.bones ?? []
+  if (bones.some((b) => /^anchor_/i.test(b.name))) return false
+  let min = Infinity
+  let max = -Infinity
+  for (const b of bones) {
+    for (const c of b.cubes ?? []) {
+      min = Math.min(min, c.origin[0], c.origin[0] + c.size[0])
+      max = Math.max(max, c.origin[0], c.origin[0] + c.size[0])
+    }
+  }
+  return min < max && Math.abs((min + max) / 2) < 3 && max - min <= 20
+}
+
 async function loadParts(e: DawnEntry, raw: boolean): Promise<LoadedModel> {
   const anim = e.anim ? normalizeAnims(await fetchJson<AnimFile>(e.anim)) : undefined
+  const geos: GeoFile[] = []
   const parts = await Promise.all(
     e.parts.map(async (p) => {
       const [geo, img] = await Promise.all([fetchJson<GeoFile>(p.geo), fetchBuf(p.texture).then((b) => decodeFrames(b, mimeOf(p.texture)))])
+      geos.push(geo)
       const rig = buildRig(geo, img.bitmap, img.layout, [], {
         animFile: anim,
         lib: NO_LIB,
@@ -75,8 +93,13 @@ async function loadParts(e: DawnEntry, raw: boolean): Promise<LoadedModel> {
   )
   const object = new Group()
   for (const m of parts) object.add(m.object)
-  // Shields without an anchor bone are held items: dressing puts them in the left hand.
-  if (e.item.category === 'shields') object.userData.attachedBone = 'LEFT_HAND'
+  // Shields without an anchor bone are held items: dressing puts them in the left hand. Those modelled like
+  // vanilla's shield (centred on x = 0; the flat one is vanilla's model 10 px higher) take vanilla's
+  // third-person shield transform; the rest are drawn beside the arm already.
+  if (e.item.category === 'shields') {
+    object.userData.attachedBone = 'LEFT_HAND'
+    if (raw && geos.every((g) => shieldSpace(g))) object.userData.held = { hand: 'left', matrix: vanillaHeld(SHIELD_DISPLAY.left, true, SHIELD_FILE_TO_MODEL) }
+  }
   return combine(parts, raw ? object : fitObject(object))
 }
 

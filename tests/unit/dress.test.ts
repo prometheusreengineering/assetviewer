@@ -173,7 +173,19 @@ describe('dressPlayer: attached_bone', () => {
       expect(o.position.toArray()).toEqual([-0.375, 0.7, 0.1])
       expect(o.rotation.x).toBeCloseTo(-Math.PI / 2)
     }
-    if (attached === 'LEFT_HAND') expect(o.position.toArray()).toEqual([0.45, 0.2, 0.2])
+    // shields modelled beside the arm stay where they are drawn
+    if (attached === 'LEFT_HAND') expect(o.position.toArray()).toEqual([0, 0, 0])
+  })
+  it('a held matrix places the item on top of its own transform, then it follows that arm', async () => {
+    const o = new Group()
+    o.add(box())
+    o.scale.set(1 / 16, 1 / 16, -1 / 16)
+    o.userData.held = { hand: 'left', matrix: new Matrix4().makeTranslation(0.4, 1, 0) }
+    await dress([o], [entry('geo')])
+    expect(boneOf(o)).toBe('left_arm')
+    expect(o.matrixAutoUpdate).toBe(false)
+    const want = new Matrix4().makeTranslation(0.4, 1, 0).multiply(new Matrix4().makeScale(1 / 16, 1 / 16, -1 / 16))
+    expect(o.matrix.elements.map((v) => +v.toFixed(6))).toEqual(want.elements.map((v) => +v.toFixed(6)))
   })
   it('no biped bones and no attached bone: stays in the scene', async () => {
     const o = new Group()

@@ -414,6 +414,12 @@ describe('built-in geometry', () => {
     const g = dragonWingGeo()['minecraft:geometry'][0]!
     expect(g.bones.map((b) => b.name)).toEqual(['wings', 'right_wing', 'right_tip', 'left_wing', 'left_tip'])
     expect(g.description).toEqual({ texture_width: 256, texture_height: 256 })
+    // the classic cosmetic's pose: hinged 2 px off the spine at 1.45 blocks, 0.2 behind; X -80, Y 20, Z 20 (mirrored left)
+    const bone = (n: string) => g.bones.find((b) => b.name === n)!
+    expect(bone('right_wing')).toMatchObject({ pivot: [-2, 23.2, 3.2], rotation: [-80, -20, 20] })
+    expect(bone('left_wing')).toMatchObject({ pivot: [2, 23.2, 3.2], rotation: [-80, 20, -20] })
+    // a 10 px wing, like the dragon's 56 at 10/56
+    expect(bone('right_tip').pivot![0]).toBeCloseTo(-12)
   })
   it('cape: OptiFine 22x17 layout, player version hangs from the body', () => {
     expect(CAPE_GEO['minecraft:geometry'][0]!.description).toEqual({ texture_width: 22, texture_height: 17 })

@@ -144,15 +144,24 @@ function attach(player: Player, scene: Group, object: Object3D, entry: Wearable)
   if (matches.length) return
   // No biped bones: the model is in player space and follows the bone named by the gek.
   const attached = object.userData.attachedBone as string | undefined
-  if (attached === 'RIGHT_ARM') {
+  // Held items with a known transform (three/held.ts) are placed by it, in rest pose, then follow the arm.
+  const held = object.userData.held as { hand: 'left' | 'right'; matrix: Matrix4 } | undefined
+  if (held) {
+    // `matrix` maps the rig's raw space (file px scaled by 1, 1, -1 over 16) to the player; the object may be
+    // that scaled root itself (Lunar) or a group of them (Dawn), so it applies on top of its own transform.
+    object.updateMatrix()
+    object.matrixAutoUpdate = false
+    object.matrix.premultiply(held.matrix)
+    scene.updateMatrixWorld(true)
+    socket(bone(held.hand === 'left' ? 'left_arm' : 'right_arm'), object)
+  } else if (attached === 'RIGHT_ARM') {
     // Held items are modelled around the origin: put it in the right hand, pointing forward.
     object.position.set(-0.375, 0.7, 0.1)
     object.rotation.x = -Math.PI / 2
     scene.updateMatrixWorld(true)
     socket(bone('right_arm'), object)
   } else if (attached === 'LEFT_HAND') {
-    // Shields (a guess at the pose): upright in the left hand, the face forward.
-    object.position.set(0.45, 0.2, 0.2)
+    // Shields modelled in player space (already beside the left arm) just follow the arm.
     scene.updateMatrixWorld(true)
     socket(bone('left_arm'), object)
   } else if (attached === 'HEAD') socket(bone('head'), object, 'head')
