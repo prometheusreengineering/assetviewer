@@ -67,7 +67,10 @@ const collection = computed(() => (props.category?.startsWith(COLLECTION_PREFIX)
 watchEffect(() => {
   const c = props.category
   const label = c === 'home' || !c ? '' : collection.value?.name ?? categories.value.find((x) => x.id === c)?.label ?? ''
-  document.title = label ? `${label} · Asset Viewer` : provider.value.available ? `Asset Viewer – ${provider.value.name} cosmetics viewer` : `${provider.value.name} · Asset Viewer`
+  const name = provider.value.name
+  document.title = label ? `${label} · ${name} · Asset Viewer` : provider.value.available ? `Asset Viewer – ${name} cosmetics viewer` : `${name} · Asset Viewer`
+  // Rendering crawlers read the description per page too.
+  document.querySelector('meta[name="description"]')?.setAttribute('content', `${label ? `${label}: browse` : 'Browse'}, preview in 3D, try on and download ${name} cosmetics. Unofficial Minecraft cosmetics viewer.`)
 })
 
 // Categories bigger than this get a performance warning.

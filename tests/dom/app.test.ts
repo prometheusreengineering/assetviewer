@@ -86,7 +86,7 @@ describe('category grid', () => {
     await open('/lunar/cloak')
     expect(count()).toBe('3 items')
     expect(cards()).toEqual(['Blue Cloak', '12', 'Unl'])
-    expect(document.title).toBe('Cloaks · Asset Viewer')
+    expect(document.title).toBe('Cloaks · Lunar Client · Asset Viewer')
     expect(menuItem('Cloaks').closest('.cat-active')).toBeTruthy()
   })
 
@@ -209,7 +209,7 @@ describe('Everything and collections', () => {
     expect($('.collcount')!.textContent).toBe('2 items')
     expect(cards()).toEqual(['Crown', 'Blue Cloak'])
     expect(byText('Delete', '.collactions button')).toBeUndefined()
-    expect(document.title).toBe('Favorites · Asset Viewer')
+    expect(document.title).toBe('Favorites · Lunar Client · Asset Viewer')
     // union of the fields of both categories
     press(byText('Filter', 'button'))
     await settle(10)

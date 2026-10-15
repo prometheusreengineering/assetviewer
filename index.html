@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Asset Viewer – Lunar Client cosmetics viewer</title>
-    <meta name="description" content="Unofficial viewer for Lunar Client cosmetics: browse every hat, cloak, wing, pet and emote, preview them in 3D, try them on a player and download the files." />
+    <title>Asset Viewer – Lunar Client, Dawn Client & Essential cosmetics viewer</title>
+    <meta name="description" content="Unofficial 3D viewer for Minecraft client cosmetics: browse every Lunar Client and Dawn Client hat, cloak, wing, pet and emote, plus Essential from your own game files. Preview in 3D, try them on your skin and download the files." />
+    <meta name="keywords" content="Lunar Client cosmetics, Dawn Client cosmetics, Essential cosmetics, Minecraft cosmetics viewer, Minecraft cloaks, wings, emotes, 3D model viewer" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0b1210" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
@@ -12,21 +14,47 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://assetviewer.dreamys.studio/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
     <meta property="og:url" content="https://assetviewer.dreamys.studio/" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="Asset Viewer" />
-    <meta property="og:title" content="Asset Viewer – Lunar Client cosmetics viewer" />
-    <meta property="og:description" content="Browse, preview in 3D and download Lunar Client cosmetics, emotes and resources." />
+    <meta property="og:title" content="Asset Viewer – Minecraft client cosmetics in 3D" />
+    <meta property="og:description" content="Browse, preview in 3D, try on and download Lunar Client, Dawn Client and Essential cosmetics and emotes." />
     <meta property="og:image" content="https://assetviewer.dreamys.studio/og.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Asset Viewer: browse, preview in 3D, try on and download Lunar Client, Dawn Client and Essential cosmetics" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Asset Viewer – Lunar Client cosmetics viewer" />
-    <meta name="twitter:description" content="Browse, preview in 3D and download Lunar Client cosmetics, emotes and resources." />
+    <meta name="twitter:title" content="Asset Viewer – Minecraft client cosmetics in 3D" />
+    <meta name="twitter:description" content="Browse, preview in 3D, try on and download Lunar Client, Dawn Client and Essential cosmetics and emotes." />
     <meta name="twitter:image" content="https://assetviewer.dreamys.studio/og.png" />
+    <meta name="twitter:image:alt" content="Asset Viewer: browse, preview in 3D, try on and download Lunar Client, Dawn Client and Essential cosmetics" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Asset Viewer",
+        "url": "https://assetviewer.dreamys.studio/",
+        "image": "https://assetviewer.dreamys.studio/og.png",
+        "description": "Unofficial 3D viewer for Lunar Client, Dawn Client and Essential Minecraft cosmetics and emotes.",
+        "applicationCategory": "EntertainmentApplication",
+        "operatingSystem": "Any (web browser with WebGL)",
+        "browserRequirements": "Requires JavaScript and WebGL",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <!-- Crawlers that don't run JavaScript still get a description of the site. -->
+    <noscript>
+      <h1>Asset Viewer</h1>
+      <p>An unofficial viewer for Minecraft client cosmetics. Browse every Lunar Client and Dawn Client hat, cloak, wing, pet, aura and emote, plus Essential cosmetics read from your own game files. Preview them in 3D, dress a player in your own skin and download the files.</p>
+      <p>Asset Viewer needs JavaScript and WebGL.</p>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

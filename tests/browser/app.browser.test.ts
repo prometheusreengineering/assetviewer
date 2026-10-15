@@ -30,7 +30,7 @@ afterAll(() => app.unmount())
 describe('app in the browser', () => {
   it('loads the cloak category from the live CDN', async () => {
     await expect.poll(() => $$('.card').length, { timeout: 60_000 }).toBeGreaterThan(10)
-    expect(document.title).toBe('Cloaks · Asset Viewer')
+    expect(document.title).toBe('Cloaks · Lunar Client · Asset Viewer')
     expect($('.foot')!.textContent).toMatch(/Lunar Client: [\d,]+ items/)
     // the shared WebGL canvas sits over the grid
     expect($('.grid-wrap canvas')).toBeTruthy()
