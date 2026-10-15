@@ -19,11 +19,11 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
 - Shows cosmetics on a player with any Minecraft skin (wide or slim arms), alone or as a full outfit in the outfit builder.
 - Search, filter and sort on any field, with the view kept in the URL so it can be shared.
 - Collections, side-by-side compare and ZIP export of the source files.
+- Essential outfits follow Essential's own rules: items that can't be worn together, parts hidden by other
+  cosmetics or by armor (drawn stand-in pieces, in any of Essential's three armor modes), and any Essential emote as
+  the pose.
 - Runs entirely in the browser; downloaded files are cached locally.
 
-### Future Plans
-
-- Essential emotes in the outfit builder's pose picker.
 
 ## Development
 

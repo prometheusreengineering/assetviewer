@@ -2,7 +2,7 @@
 // body/head/arms/legs, each part under an `_ext` bone) plus props. In-game the player's own parts hang from
 // those bones; here the player is built as standard Bedrock cubes in the skin's box-UV layout and dropped into
 // them, so the emote's Bedrock animation moves it directly.
-import { Box3, Group, Vector3 } from 'three'
+import { Box3, Group, Vector3, type Material, type Matrix4, type Mesh, type Object3D } from 'three'
 import { isSlimSkin, skinBitmap } from '../../skin'
 import { AnimationPlayer, normalizeAnims, type AnimFile } from '../../three/animation/bedrockAnim'
 import { EffectPlayer, particleCues, type LoadedEffect } from '../../three/effects'
@@ -11,7 +11,9 @@ import { buildGeoRig, createMaterial, createTexture, type GeoBone, type GeoFile 
 import { transparentPixel } from '../../three/glow'
 import { buildRig, finish, singleFrame } from '../../three/rig'
 import type { DownloadFile, LoadedModel } from '../types'
+import { socket } from '../lunar/dress'
 import { emoteTimeline } from '../lunar/emotes'
+import { maskedSkin } from '../../three/player'
 import { SoundPlayer, soundCues, type SoundDefinitions } from './sounds'
 
 type Cube = { origin: [number, number, number]; size: [number, number, number]; uv: [number, number]; inflate?: number }
@@ -63,11 +65,22 @@ export interface EmoteSources {
   files: DownloadFile[]
 }
 
+/** Cosmetics worn during the emote (outfit builder): raw Essential models and their skin masks. */
+export interface EmoteOutfit {
+  worn: Object3D[]
+  masks: ImageBitmap[]
+}
+/** Cosmetic bones that have no emote bone of their name, and the emote bone they ride on. */
+const STAND_IN: Record<string, string> = { cape: 'body' }
+
 const TICKS = 20
 
-export async function buildEmote(src: EmoteSources): Promise<LoadedModel> {
-  const skin = await skinBitmap()
-  const slim = isSlimSkin(skin)
+export async function buildEmote(src: EmoteSources, outfit?: EmoteOutfit): Promise<LoadedModel> {
+  const plain = await skinBitmap()
+  // Skin pixels under worn cosmetics are hidden (their skin masks).
+  const skin = outfit?.masks.length ? await maskedSkin(plain, outfit.masks) : plain
+  // (slim arms are read from the skin itself: masks make the arm columns transparent)
+  const slim = isSlimSkin(plain)
   // Props and the skeleton: the emote's own texture (a transparent pixel when it has none).
   const propTex = src.texture ?? (await transparentPixel())
   const rig = buildRig(src.geo, propTex, singleFrame(), src.files, {
@@ -95,6 +108,30 @@ export async function buildEmote(src: EmoteSources): Promise<LoadedModel> {
   const model = finish(rig)
   const object = new Group()
   object.add(rig.object)
+  // Worn cosmetics hang from the emote's bones of the same names, as in game (the skeleton is still at rest).
+  // Raw models are z-mirrored, the emote rig x-mirrored: a half turn lines them up.
+  for (const worn of outfit?.worn ?? []) {
+    // Cosmetics often repeat the skin's own boxes (a onesie's body is the body at inflate 0); the game draws
+    // them over the player, so they win equal depths here too.
+    worn.traverse((o) => {
+      const mat = (o as Mesh).material as Material | undefined
+      if ((o as Mesh).isMesh && mat && 'polygonOffset' in mat) {
+        mat.polygonOffsetFactor = -1
+        mat.polygonOffsetUnits = -1
+      }
+    })
+    const turn = new Group()
+    turn.rotation.y = Math.PI
+    turn.add(worn)
+    object.add(turn)
+    object.updateMatrixWorld(true)
+    const parts: [Object3D, Object3D, Matrix4][] = []
+    for (const o of worn.getObjectByName('root')?.children ?? []) {
+      const target = skel.get(o.name) ?? skel.get(STAND_IN[o.name] ?? '')
+      if (target) parts.push([o, target.group, o.parent!.matrixWorld.clone()])
+    }
+    for (const [o, bone, parentWorld] of parts) socket(bone, o, undefined, parentWorld)
+  }
 
   // Timeline: the emote's animations one after another, the last one looping.
   const anim = normalizeAnims(src.anim)

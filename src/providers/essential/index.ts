@@ -1,5 +1,5 @@
 import { del, get, set } from 'idb-keyval'
-import { Box3, Group, Vector3 } from 'three'
+import { Box3, Group, Vector3, type Object3D } from 'three'
 import { ref } from 'vue'
 import { getUrlBuffer } from '../../cdn'
 import { decodeFrames } from '../../three/animatedImage'
@@ -11,13 +11,15 @@ import { addGlowLayer, transparentPixel } from '../../three/glow'
 import { createTexture } from '../../three/geoModel'
 import type { Scheme } from '../../three/particles'
 import type { Texture } from 'three'
-import { buildRig, finish, stackedFrames } from '../../three/rig'
+import { buildRig, finish, singleFrame, stackedFrames } from '../../three/rig'
+import { armorGeo, armorTexture } from '../../three/armor'
+import { skinIsSlim } from '../../skin'
 import { lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
-import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, LoadedModel } from '../types'
+import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, DressOptions, FieldDef, LoadedModel } from '../types'
 import { buildEssentialCatalog, categoryId, ESSENTIAL_CATEGORIES, orderVariants, type EssentialCatalog, type EssentialEntry } from './catalog'
-import { boneSide, defaultSide, hiddenBones, sidesOf } from './rules'
-import { buildEmote, emoteSequence, type EssentialEmoteFile } from './emote'
+import { armorHiddenBones, blockedArmor, boneSide, defaultSide, exclusiveCategories, hiddenBones, sidesOf, type ArmorPiece } from './rules'
+import { buildEmote, emoteSequence, type EmoteOutfit, type EssentialEmoteFile } from './emote'
 import type { SoundDefinitions } from './sounds'
 import { assetBytes, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
 
@@ -43,6 +45,7 @@ export async function connect(f: Partial<EssentialFolders>): Promise<void> {
   const c = buildEssentialCatalog(await readDumps(f.dumps))
   if (!c.entries.length) throw new Error('The dumps folder has no cosmetics.')
   folders = { dumps: f.dumps, cache: f.cache }
+  settingsCache.clear()
   catalog = c
   byId = new Map(c.entries.map((e) => [e.item.id, e]))
   essentialState.value = { ...essentialState.value, connected: true, items: c.entries.length, files: c.files, error: undefined }
@@ -81,7 +84,6 @@ export async function reconnect(ask: boolean): Promise<boolean> {
   return true
 }
 
-/** `<input webkitdirectory>` fallback: the dumps folder and (optionally) Essential's cosmetic-cache folder. */
 const COPY_KEY = 'assetviewer.essential.files'
 interface StoredFile {
   path: string
@@ -95,7 +97,7 @@ function entrySource(list: StoredFile[]) {
 }
 
 /**
- * `<input webkitdirectory>` fallback: the dumps folder and (optionally) Essential's cosmetic-cache folder.
+ * `<input webkitdirectory>` fallback: the dumps folder and Essential's cosmetic-cache folder.
  * `remember` keeps a copy in this browser's IndexedDB (local only) so the next visit connects by itself.
  */
 export async function connectFiles(dumps: Iterable<File>, cache?: Iterable<File>, remember = false): Promise<void> {
@@ -132,6 +134,7 @@ export async function forget(): Promise<void> {
   } catch {}
   folders = undefined
   catalog = undefined
+  settingsCache.clear()
   byId = new Map()
   essentialState.value = { connected: false, storedHandle: false, items: 0, files: 0 }
 }
@@ -144,6 +147,17 @@ async function bytes(e: EssentialEntry, path: string): Promise<ArrayBuffer> {
 }
 const json = async <T>(e: EssentialEntry, path: string) => JSON.parse(new TextDecoder().decode(await bytes(e, path))) as T
 const optionalJson = async <T>(e: EssentialEntry, path: string | undefined) => (path ? json<T>(e, path).catch(() => undefined) : undefined)
+
+// settings.json per cosmetic (outfit rules ask for it before anything is loaded).
+const settingsCache = new Map<string, Promise<unknown>>()
+function settingsOf(e: EssentialEntry): Promise<unknown> {
+  let p = settingsCache.get(e.item.id)
+  if (!p) {
+    p = optionalJson<unknown>(e, e.settings)
+    settingsCache.set(e.item.id, p)
+  }
+  return p
+}
 
 // A transparent 1x1 stand-in when the default variant has no glow but another one does.
 const blankBitmap = transparentPixel
@@ -195,7 +209,7 @@ interface EssentialAnimFile extends AnimFile {
 }
 
 /** An emote on the player in the current skin, with its props, particles and sounds (see emote.ts). */
-async function loadEmote(e: EssentialEntry): Promise<LoadedModel> {
+async function loadEmote(e: EssentialEntry, outfit?: EmoteOutfit): Promise<LoadedModel> {
   if (!e.geometry || !e.animations) throw new Error(`${e.item.name} has no emote animation`)
   const [geo, anim, defs] = await Promise.all([
     json<GeoFile>(e, e.geometry),
@@ -218,7 +232,7 @@ async function loadEmote(e: EssentialEntry): Promise<LoadedModel> {
     const p = e.files.has(path + '.ogg') ? path + '.ogg' : e.files.has(path) ? path : undefined
     return p ? bytes(e, p) : Promise.resolve(undefined)
   }
-  return buildEmote({ geo, anim, texture, effects, sounds: defs, sound, files })
+  return buildEmote({ geo, anim, texture, effects, sounds: defs, sound, files }, outfit)
 }
 
 async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise<LoadedModel> {
@@ -227,7 +241,7 @@ async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise
   // On a slim (Alex) player, the slim-arm geometry and skin masks.
   const alex = raw && slim
   const geoPath = alex && e.geometryAlex ? e.geometryAlex : e.geometry
-  const [geo, anim, settings] = await Promise.all([json<GeoFile>(e, geoPath), optionalJson<EssentialAnimFile>(e, e.animations), optionalJson<unknown>(e, e.settings)])
+  const [geo, anim, settings] = await Promise.all([json<GeoFile>(e, geoPath), optionalJson<EssentialAnimFile>(e, e.animations), settingsOf(e)])
   const textures = orderVariants(e.textures, settings)
   const decode = async (path: string) => decodeFrames(await bytes(e, path), 'image/png')
   const img = await decode(textures[0]!.path)
@@ -355,6 +369,86 @@ async function loadModel(e: EssentialEntry, raw: boolean, slim = false): Promise
   return out
 }
 
+type Info = { id: string; settings: unknown; bones?: Map<string, { group: Object3D }> }
+const ARMOR_ID = '__armor'
+
+/** The stand-in armor pieces as a raw model (bones like an Essential cosmetic's parts). */
+async function armorModel(pieces: ArmorPiece[]): Promise<LoadedModel> {
+  const rig = buildRig(armorGeo(pieces), armorTexture() as unknown as ImageBitmap, singleFrame(), [], {
+    raw: true,
+    flipU: true,
+    prep: (root) => (root.scale.z *= -1),
+  })
+  return finish(rig)
+}
+
+/**
+ * A player wearing Essential cosmetics, with Essential's rules between them (settings.json hiding rules,
+ * armor handling in the chosen mode) and optionally doing an Essential emote: then the cosmetics ride on the
+ * emote's skeleton like in game; otherwise they are dressed on Lunar's player body like Dawn's outfits.
+ */
+async function dress(items: CosmeticItem[], emote?: CosmeticItem, opts: DressOptions = {}): Promise<LoadedModel> {
+  const slim = await skinIsSlim()
+  const worn = items.map((it) => byId.get(it.id)).filter((e): e is EssentialEntry => !!e && !e.item.thumb)
+  const loaded = new Map<string, LoadedModel>()
+  await Promise.all(
+    worn.map((e) =>
+      loadModel(e, true, slim).then(
+        (m) => void loaded.set(e.item.id, m),
+        (err) => console.warn(e.item.name, err),
+      ),
+    ),
+  )
+  const infos = [...loaded.values()].map((m) => m.object.userData.essential as Info | undefined).filter((x): x is Info => !!x)
+  const hideAll = (hidden: Map<string, Set<string>>) => {
+    for (const [id, names] of hidden) for (const n of names) {
+      const b = infos.find((i) => i.id === id)?.bones?.get(n)
+      if (b) b.group.visible = false
+    }
+  }
+  // settings.json rules between the worn cosmetics.
+  hideAll(hiddenBones(infos))
+  // Armor: Essential either hides cosmetic parts under it, hides the armor a cosmetic covers, or shows both.
+  let pieces = opts.armor ?? []
+  const mode = opts.armorMode ?? 'armor'
+  if (pieces.length && mode === 'armor') hideAll(armorHiddenBones(infos, pieces))
+  if (pieces.length && mode === 'cosmetics') {
+    const shown = (g: Object3D) => {
+      let mesh = false
+      g.traverseVisible((o) => void ((o as { isMesh?: boolean }).isMesh && (mesh = true)))
+      return mesh && g.visible
+    }
+    const blocked = blockedArmor(infos.map((i) => ({ ...i, visible: [...(i.bones ?? [])].filter(([, b]) => shown(b.group)).map(([n]) => n) })))
+    pieces = pieces.filter((p) => !blocked.has(p))
+  }
+  const armor = pieces.length ? await armorModel(pieces) : undefined
+  const all = [...worn.filter((e) => loaded.has(e.item.id)).map((e) => ({ kind: 'essential', item: e.item, model: loaded.get(e.item.id)! }))]
+  if (armor) all.push({ kind: 'essential', item: { id: ARMOR_ID, name: 'Armor' } as CosmeticItem, model: armor })
+  const models = all.map((w) => w.model)
+
+  const emoteEntry = emote ? byId.get(emote.id) : undefined
+  if (emoteEntry?.item.category === 'emote') {
+    const masks = models.map((m) => m.object.userData.skinMask as ImageBitmap | undefined).filter((b): b is ImageBitmap => !!b)
+    const base = await loadEmote(emoteEntry, { worn: models.map((m) => m.object), masks })
+    return {
+      ...base,
+      tick(ms) {
+        base.tick(ms)
+        for (const m of models) m.tick(ms)
+      },
+      files: [...base.files, ...models.flatMap((m) => m.files)],
+      dispose() {
+        base.dispose()
+        for (const m of models) m.dispose()
+      },
+    }
+  }
+  // The player body and skin are Lunar's (its CDN has the emote armature), like Dawn's outfits.
+  const hashOf = await lunarHashOf()
+  const byItem = new Map(all.map((w) => [w.item.id, w.model]))
+  return dressPlayer(all, undefined, undefined, hashOf, async (w) => byItem.get(w.item.id)!)
+}
+
 export const essentialProvider: CosmeticProvider = {
   id: 'essential',
   name: 'Essential',
@@ -409,28 +503,15 @@ export const essentialProvider: CosmeticProvider = {
 
   itemById: (id) => byId.get(id)?.item,
 
-  async dressPlayer(items) {
-    // The player body and skin are Lunar's (its CDN has the emote armature), like Dawn's outfits.
-    const hashOf = await lunarHashOf()
-    const worn = items.map((it) => byId.get(it.id)).filter((e): e is EssentialEntry => !!e && !e.item.thumb).map((e) => ({ kind: 'essential', item: e.item }))
-    const loaded: LoadedModel[] = []
-    const dressed = await dressPlayer(worn, undefined, undefined, hashOf, async (w, slim) => {
-      const m = await essentialProvider.loadModel(w.item, { raw: true, slim })
-      loaded.push(m)
-      return m
-    })
-    // settings.json rules between the worn cosmetics (bones keep their identity after being socketed).
-    type Info = { id: string; settings: unknown; bones?: Map<string, { group: { visible: boolean } }> }
-    const infos = loaded.map((m) => m.object.userData.essential as Info | undefined).filter((x): x is Info => !!x)
-    for (const [id, names] of hiddenBones(infos)) {
-      const bones = infos.find((i) => i.id === id)?.bones
-      for (const n of names) {
-        const b = bones?.get(n)
-        if (b) b.group.visible = false
-      }
-    }
-    return dressed
+  emoteCategory: 'emote',
+  armor: true,
+
+  async exclusions(item) {
+    const e = byId.get(item.id)
+    return e ? exclusiveCategories(await settingsOf(e)) : []
   },
+
+  dressPlayer: (items, emote, opts) => dress(items, emote, opts),
 
   async imageUrl(item) {
     // Icons: their texture, from the local files.

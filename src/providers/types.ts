@@ -93,6 +93,14 @@ export interface RawFile {
   size: number
 }
 
+export type ArmorPiece = 'helmet' | 'chestplate' | 'leggings' | 'boots'
+/** Essential's "cosmetics or armor" setting: both drawn, armor hides cosmetic parts, or cosmetics hide armor. */
+export type ArmorMode = 'both' | 'armor' | 'cosmetics'
+export interface DressOptions {
+  armor?: ArmorPiece[]
+  armorMode?: ArmorMode
+}
+
 export interface CosmeticProvider {
   id: string
   name: string
@@ -112,7 +120,13 @@ export interface CosmeticProvider {
   /** `slim` picks slim-arm (Alex) models where a cosmetic has them (worn by a slim-skinned player). */
   loadModel(item: CosmeticItem, opts?: { raw?: boolean; slim?: boolean }): Promise<LoadedModel>
   /** A player wearing `items`, optionally playing an emote item. */
-  dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem): Promise<LoadedModel>
+  dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem, opts?: DressOptions): Promise<LoadedModel>
+  /** The category whose items are poses in the outfit builder (default `emotes`). */
+  emoteCategory?: string
+  /** Outfit rules: the categories `item` can't be worn together with (Essential MUTUALLY_EXCLUSIVE). */
+  exclusions?(item: CosmeticItem): Promise<string[]>
+  /** The outfit builder offers armor (drawn stand-ins) and the provider's armor rules. */
+  armor?: boolean
   /** The item's source files (model, textures, animations, metadata), for bulk export. */
   sourceFiles?(item: CosmeticItem): Promise<DownloadFile[]>
   /** Rough download size in bytes of sourceFiles(), from the index. */

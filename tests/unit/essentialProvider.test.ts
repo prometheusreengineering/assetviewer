@@ -1,4 +1,4 @@
-import { Mesh, type Object3D, type Texture } from 'three'
+import { Mesh, Vector3, type Object3D, type Texture } from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { connect, essentialProvider as ep, essentialState, forget } from '../../src/providers/essential'
 import { memorySource } from '../../src/providers/essential/localData'
@@ -221,6 +221,66 @@ describe('dressPlayer', () => {
     // the top's body and the wings' body both follow the torso
     expect(parentBone('body').filter((b) => b === 'low_body')).toHaveLength(2)
     m.tick(400)
+    m.dispose()
+  })
+
+  it('exclusions: the categories a cosmetic is mutually exclusive with', async () => {
+    expect(await ep.exclusions!(item('TEST_HAT'))).toEqual(['wings'])
+    expect(await ep.exclusions!(item('TEST_TOP'))).toEqual([])
+    expect(ep.emoteCategory).toBe('emote')
+    expect(ep.armor).toBe(true)
+  })
+
+  const named = (o: Object3D, name: string) => {
+    const out: Object3D[] = []
+    o.traverse((x) => void (x.name === name && out.push(x)))
+    return out
+  }
+  const hatHead = (o: Object3D) => named(o, 'brim')[0]!.parent!
+
+  it('armor: hides cosmetic parts, is hidden by cosmetics, or both show (the stand-in pieces are worn on the player)', async () => {
+    // no armor: the hat shows, no stand-in
+    const plain = await ep.dressPlayer!([item('TEST_HAT')], undefined, { armor: [], armorMode: 'armor' })
+    const count = meshes(plain.object).length
+    expect(hatHead(plain.object).visible).toBe(true)
+    plain.dispose()
+    // a helmet hides the hat's head part (ARMOR_HANDLING head)
+    const armor = await ep.dressPlayer!([item('TEST_HAT')], undefined, { armor: ['helmet'], armorMode: 'armor' })
+    expect(hatHead(armor.object).visible).toBe(false)
+    expect(meshes(armor.object)).toHaveLength(count + 1)
+    armor.dispose()
+    // cosmetics win: the hat covers the head, so no helmet is drawn; boots still are
+    const cos = await ep.dressPlayer!([item('TEST_HAT')], undefined, { armor: ['helmet', 'boots'], armorMode: 'cosmetics' })
+    expect(hatHead(cos.object).visible).toBe(true)
+    expect(meshes(cos.object)).toHaveLength(count + 2)
+    cos.dispose()
+    const both = await ep.dressPlayer!([item('TEST_HAT')], undefined, { armor: ['helmet'], armorMode: 'both' })
+    expect(hatHead(both.object).visible).toBe(true)
+    expect(meshes(both.object)).toHaveLength(count + 1)
+    both.dispose()
+  })
+
+  it('an Essential emote as the pose: the cosmetics ride the emote skeleton', async () => {
+    const m = await ep.dressPlayer!([item('TEST_TOP'), item('TEST_HAT')], item('TEST_DANCE'), { armor: ['boots'], armorMode: 'armor' })
+    expect(m.timeline!.duration).toBeCloseTo(3)
+    m.object.updateMatrixWorld(true)
+    // the top's right arm hangs (through its socket holder) from the emote's arm_right bone
+    const emoteArm = named(m.object, 'arm_right').find((o) => o.parent?.name === 'body_wrap')!
+    const topArm = named(m.object, 'arm_right').find((o) => o !== emoteArm && o.parent?.parent === emoteArm)
+    expect(topArm).toBeDefined()
+    // boots on both legs
+    for (const leg of named(m.object, 'leg_left').filter((o) => o.parent?.name === 'body_orbit')) expect(meshes(leg).length).toBeGreaterThan(2)
+    // the arm moves with the emote: the top's sleeve follows
+    const before = topArm!.getWorldPosition(new Vector3())
+    m.timeline!.seek(1)
+    m.tick(0)
+    m.object.updateMatrixWorld(true)
+    expect(topArm!.getWorldPosition(new Vector3()).distanceTo(before)).toBeCloseTo(0, 6)
+    const sleeve = meshes(topArm!)[0]!.getWorldPosition(new Vector3())
+    m.timeline!.seek(0)
+    m.tick(0)
+    m.object.updateMatrixWorld(true)
+    expect(meshes(topArm!)[0]!.getWorldPosition(new Vector3()).distanceTo(sleeve)).toBeGreaterThan(0.01)
     m.dispose()
   })
 })

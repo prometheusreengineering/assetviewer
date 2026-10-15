@@ -27,6 +27,28 @@ const PART_BONES: Record<string, string[]> = {
   left_leg: ['left_leg', 'low_left_leg'],
 }
 
+/** The skin with every pixel a mask paints black made transparent (Essential skin masks, 64x64 at skin scale). */
+export async function maskedSkin(base: ImageBitmap, masks: ImageBitmap[]): Promise<ImageBitmap> {
+  const w = base.width
+  const h = base.height
+  const canvas = new OffscreenCanvas(w, h)
+  const g = canvas.getContext('2d', { willReadFrequently: true })!
+  g.drawImage(base, 0, 0)
+  const px = g.getImageData(0, 0, w, h)
+  // Masks are drawn at the skin's scale (64 px = one skin width; legacy 64x32 skins get the top half).
+  const k = w / 64
+  const mc = new OffscreenCanvas(w, h).getContext('2d', { willReadFrequently: true })!
+  mc.imageSmoothingEnabled = false
+  for (const m of masks) {
+    mc.clearRect(0, 0, w, h)
+    mc.drawImage(m, 0, 0, m.width * k, m.height * k)
+    const md = mc.getImageData(0, 0, w, h).data
+    for (let i = 0; i < md.length; i += 4) if (md[i + 3]! > 0 && md[i]! < 128) px.data[i + 3] = 0
+  }
+  g.putImageData(px, 0, 0)
+  return createImageBitmap(canvas)
+}
+
 export function createPlayer(body: BobjFile, skin: ImageBitmap): Player {
   const skel = buildSkeleton(body.bones)
   const object = new Group()
@@ -66,25 +88,7 @@ export function createPlayer(body: BobjFile, skin: ImageBitmap): Player {
       applyTexture(bitmap)
     },
     async maskSkin(masks) {
-      if (!masks.length) return applyTexture(base)
-      const w = base.width
-      const h = base.height
-      const canvas = new OffscreenCanvas(w, h)
-      const g = canvas.getContext('2d', { willReadFrequently: true })!
-      g.drawImage(base, 0, 0)
-      const px = g.getImageData(0, 0, w, h)
-      // Masks are drawn at the skin's scale (64 px = one skin width; legacy 64x32 skins get the top half).
-      const k = w / 64
-      const mc = new OffscreenCanvas(w, h).getContext('2d', { willReadFrequently: true })!
-      mc.imageSmoothingEnabled = false
-      for (const m of masks) {
-        mc.clearRect(0, 0, w, h)
-        mc.drawImage(m, 0, 0, m.width * k, m.height * k)
-        const md = mc.getImageData(0, 0, w, h).data
-        for (let i = 0; i < md.length; i += 4) if (md[i + 3]! > 0 && md[i]! < 128) px.data[i + 3] = 0
-      }
-      g.putImageData(px, 0, 0)
-      applyTexture(await createImageBitmap(canvas))
+      applyTexture(masks.length ? await maskedSkin(base, masks) : base)
     },
     hideParts(parts) {
       const hidden = new Set(parts.flatMap((p) => PART_BONES[p] ?? []))

@@ -33,7 +33,7 @@ async function run(fn: () => Promise<unknown>) {
 const pick = () => run(pickFolder)
 const again = () => run(async () => (await reconnect(true)) || Promise.reject(new Error('Permission to read the folder was not given.')))
 const remember = ref(false)
-const useFiles = () => run(() => connectFiles(dumpsFiles.value, cacheFiles.value.length ? cacheFiles.value : undefined, remember.value))
+const useFiles = () => run(() => connectFiles(dumpsFiles.value, cacheFiles.value, remember.value))
 const files = (e: Event) => [...((e.target as HTMLInputElement).files ?? [])]
 const dumpsInput = ref<HTMLInputElement>()
 const cacheInput = ref<HTMLInputElement>()
@@ -80,7 +80,7 @@ async function copy(path: string) {
         </li>
         <li>
           <div class="step-head">
-            <strong>Cosmetic cache</strong> <span class="opt">(optional: without it every file is downloaded)</span>
+            <strong>Cosmetic cache</strong>
             <Button label="Choose" icon="pi pi-folder-open" size="small" severity="secondary" @click="cacheInput?.click()" />
             <span v-if="cacheFiles.length" class="picked icon-text"><i class="pi pi-check" />{{ cacheFiles.length.toLocaleString() }} files</span>
           </div>
@@ -90,7 +90,7 @@ async function copy(path: string) {
         </li>
       </ol>
       <div class="go">
-        <Button label="Show my cosmetics" icon="pi pi-check" :disabled="!dumpsFiles.length" :loading="busy" @click="useFiles" />
+        <Button label="Show my cosmetics" icon="pi pi-check" :disabled="!dumpsFiles.length || !cacheFiles.length" :loading="busy" @click="useFiles" />
         <label class="remember" title="Keeps a copy of the chosen files in this browser's own storage (on this device only), so next time it opens by itself. Disconnect on the Essential home page removes it.">
           <Checkbox v-model="remember" binary /> Remember on this device
         </label>
@@ -118,7 +118,6 @@ h1 { margin: 0 0 0.75rem; font-size: 1.8rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
 .steps { padding-left: 1.2rem; margin: 1.25rem 0; display: flex; flex-direction: column; gap: 1rem; }
 .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
-.opt { opacity: 0.6; font-size: 0.9rem; }
 .picked { color: var(--p-primary-color); gap: 0.35rem; }
 .path { font-size: 0.85rem; opacity: 0.8; user-select: all; }
 .hint { font-size: 0.9rem; opacity: 0.7; margin-top: 1rem; }

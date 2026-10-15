@@ -5,7 +5,7 @@ import Slider from 'primevue/slider'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { CosmeticProvider, Timeline } from '../providers/types'
+import type { ArmorMode, ArmorPiece, CosmeticProvider, Timeline } from '../providers/types'
 import { skinName } from '../skin'
 import { autoRotate, freeRotate } from '../viewPrefs'
 import { Viewer } from '../three/viewer'
@@ -14,8 +14,9 @@ const props = defineProps<{ provider: CosmeticProvider }>()
 const route = useRoute()
 const router = useRouter()
 
-// Every wearable 3D category is a slot.
-const slots = computed(() => props.provider.categories().filter((c) => c.group?.startsWith('Cosmetics') && c.id !== 'emotes'))
+// Every wearable 3D category is a slot; the emote category gives the poses.
+const emoteCat = props.provider.emoteCategory ?? 'emotes'
+const slots = computed(() => props.provider.categories().filter((c) => c.group?.startsWith('Cosmetics') && c.id !== emoteCat))
 // Only what can be worn (a few cosmetics are flat images without a model).
 const options = (cat: string) => props.provider.items(cat).filter((it) => it.render === '3d').map((it) => ({ label: it.name, value: it.id }))
 const optionCache = new Map<string, { label: string; value: string }[]>()
@@ -23,7 +24,7 @@ const optionsFor = (cat: string) => {
   if (!optionCache.has(cat)) optionCache.set(cat, options(cat))
   return optionCache.get(cat)!
 }
-const emoteOptions = computed(() => props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })))
+const emoteOptions = computed(() => props.provider.items(emoteCat).map((e) => ({ label: e.name, value: e.id })))
 
 // Outfit = category -> item id. The URL (?o=cat:id,...&e=emote) wins over the saved outfit, so links share it.
 // Per provider (Lunar keeps the original key so saved outfits survive).
@@ -65,7 +66,8 @@ async function rebuild() {
   error.value = ''
   try {
     const emote = emoteId.value ? props.provider.itemById?.(emoteId.value) : undefined
-    const model = await props.provider.dressPlayer(worn.value, emote)
+    const p = props.provider
+    const model = await (p.armor ? p.dressPlayer!(worn.value, emote, { armor: armor.value, armorMode: armorMode.value }) : p.dressPlayer!(worn.value, emote))
     if (mine !== token || !viewer) return model.dispose()
     viewer.setModel(model)
     timeline.value = model.timeline
@@ -88,11 +90,37 @@ watch([outfit, emoteId], ([o, e]) => {
 watch(autoRotate, (v) => viewer && (viewer.autoRotate = v))
 watch(freeRotate, (v) => viewer?.setFreeRotate(v))
 
-function setSlot(cat: string, id: string | null) {
+// Items some cosmetics can't be worn with (Essential MUTUALLY_EXCLUSIVE): putting one on takes off the other.
+const note = ref('')
+const nameOf = (id: string) => props.provider.itemById?.(id)?.name ?? id
+/** Drops what conflicts with the slots in `first` (kept), then any later conflicts in slot order. */
+async function withoutConflicts(o: Outfit, first: string[]): Promise<{ outfit: Outfit; removed: string[] }> {
+  if (!props.provider.exclusions) return { outfit: o, removed: [] }
+  const order = [...first, ...Object.keys(o).filter((c) => !first.includes(c))]
+  const kept: Outfit = {}
+  const excl = new Map<string, string[]>()
+  const removed: string[] = []
+  for (const cat of order) {
+    const id = o[cat]
+    const item = id ? props.provider.itemById?.(id) : undefined
+    if (!id || !item) continue
+    excl.set(cat, await props.provider.exclusions(item))
+    const clash = Object.keys(kept).find((k) => excl.get(k)!.includes(cat) || excl.get(cat)!.includes(k))
+    if (clash) removed.push(`${nameOf(id)} (can't be worn with ${nameOf(kept[clash]!)})`)
+    else kept[cat] = id
+  }
+  return { outfit: kept, removed }
+}
+let setToken = 0
+async function setSlot(cat: string, id: string | null) {
   const o = { ...outfit.value }
   if (id) o[cat] = id
   else delete o[cat]
-  outfit.value = o
+  const mine = ++setToken
+  const r = id ? await withoutConflicts(o, [cat]) : { outfit: o, removed: [] }
+  if (mine !== setToken) return
+  note.value = r.removed.length ? `Took off ${r.removed.join(', ')}` : ''
+  outfit.value = r.outfit
 }
 // Slots left out of "Random" (the dice on each row). Stored as exclusions so new slots start included.
 const RANDOM_KEY = props.provider.id === 'lunar' ? 'assetviewer.outfit.random' : `assetviewer.outfit.random.${props.provider.id}`
@@ -110,15 +138,52 @@ function toggleRandom(cat: string) {
     localStorage.setItem(RANDOM_KEY, JSON.stringify([...s]))
   } catch {}
 }
-function randomize() {
-  // Every included slot gets a random item; excluded slots keep what they have.
+async function randomize() {
+  // Every included slot gets a random item; excluded slots keep what they have (and win any conflict).
   const o: Outfit = { ...outfit.value }
   for (const s of slots.value) {
     if (noRandom.value.has(s.id)) continue
     const list = props.provider.items(s.id).filter((it) => it.render === '3d')
     if (list.length) o[s.id] = list[Math.floor(Math.random() * list.length)]!.id
   }
-  outfit.value = o
+  const mine = ++setToken
+  const r = await withoutConflicts(o, Object.keys(o).filter((c) => noRandom.value.has(c)))
+  if (mine !== setToken) return
+  note.value = r.removed.length ? `Left out ${r.removed.join(', ')}` : ''
+  outfit.value = r.outfit
+}
+// Armor (providers with armor rules): stand-in pieces and how they share the player with cosmetics.
+const ARMOR_KEY = `assetviewer.outfit.armor.${props.provider.id}`
+const PIECES: { id: ArmorPiece; label: string }[] = [
+  { id: 'helmet', label: 'Helmet' },
+  { id: 'chestplate', label: 'Chestplate' },
+  { id: 'leggings', label: 'Leggings' },
+  { id: 'boots', label: 'Boots' },
+]
+const MODES: { label: string; value: ArmorMode }[] = [
+  { label: 'Armor hides cosmetics', value: 'armor' },
+  { label: 'Cosmetics hide armor', value: 'cosmetics' },
+  { label: 'Show both', value: 'both' },
+]
+const armor = ref<ArmorPiece[]>([])
+const armorMode = ref<ArmorMode>('armor')
+try {
+  const v = JSON.parse(localStorage.getItem(ARMOR_KEY) ?? '{}')
+  if (Array.isArray(v.pieces)) armor.value = PIECES.map((p) => p.id).filter((p) => v.pieces.includes(p))
+  if (MODES.some((m) => m.value === v.mode)) armorMode.value = v.mode
+} catch {}
+function toggleArmor(p: ArmorPiece) {
+  armor.value = PIECES.map((x) => x.id).filter((x) => (x === p ? !armor.value.includes(p) : armor.value.includes(x)))
+}
+watch([armor, armorMode], ([pieces, mode]) => {
+  try {
+    localStorage.setItem(ARMOR_KEY, JSON.stringify({ pieces, mode }))
+  } catch {}
+  rebuild()
+})
+function clearOutfit() {
+  outfit.value = {}
+  note.value = ''
 }
 const copied = ref(false)
 async function copyLink() {
@@ -160,7 +225,7 @@ onBeforeUnmount(() => {
     <aside class="slots">
       <div class="head">
         <Button label="Random" icon="pi pi-sparkles" size="small" severity="secondary" :disabled="noRandom.size >= slots.length" title="Fill every slot whose dice is on with a random item" @click="randomize" />
-        <Button label="Clear" icon="pi pi-times" size="small" severity="secondary" :disabled="!worn.length" @click="outfit = {}" />
+        <Button label="Clear" icon="pi pi-times" size="small" severity="secondary" :disabled="!worn.length" @click="clearOutfit" />
         <Button :label="copied ? 'Copied' : 'Copy link'" icon="pi pi-link" size="small" severity="secondary" @click="copyLink" />
       </div>
       <div v-for="s in slots" :key="s.id" class="slot">
@@ -189,6 +254,25 @@ onBeforeUnmount(() => {
           @update:model-value="(v: string | null) => setSlot(s.id, v)"
         />
       </div>
+      <p v-if="note" class="note icon-text"><i class="pi pi-info-circle" />{{ note }}</p>
+      <template v-if="provider.armor">
+        <h3 class="sub">Armor</h3>
+        <div class="armor">
+          <button
+            v-for="p in PIECES"
+            :key="p.id"
+            type="button"
+            class="piece"
+            :class="{ on: armor.includes(p.id) }"
+            :aria-pressed="armor.includes(p.id)"
+            :title="`${armor.includes(p.id) ? 'Take off' : 'Wear'} ${p.label.toLowerCase()} (a drawn stand-in, not Minecraft's texture)`"
+            @click="toggleArmor(p.id)"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+        <Select v-model="armorMode" :options="MODES" option-label="label" option-value="value" size="small" class="mode" :disabled="!armor.length" title="Essential's setting for cosmetics worn together with armor" />
+      </template>
     </aside>
     <section class="stage">
       <div ref="host" class="canvas" />
@@ -220,6 +304,13 @@ onBeforeUnmount(() => {
 .slot > span { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .slot .pi { font-size: 0.8rem; opacity: 0.7; }
 .pick { min-width: 0; }
+.note { font-size: 0.8rem; opacity: 0.75; gap: 0.4rem; margin: 0.25rem 0 0; }
+.sub { font-size: 0.85rem; font-weight: 600; margin: 0.75rem 0 0; opacity: 0.8; }
+.armor { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.piece { padding: 0.3rem 0.6rem; border: 1px solid var(--av-border); border-radius: 6px; background: var(--av-card); color: var(--av-text); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.piece:hover { background: var(--av-hover); }
+.piece.on { border-color: var(--p-primary-color); color: var(--p-primary-color); }
+.mode { width: 100%; }
 .stage { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .canvas { flex: 1; min-height: 0; }
 .busy { position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; }

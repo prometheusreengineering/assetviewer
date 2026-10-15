@@ -74,7 +74,12 @@ const DEFS: Def[] = [
       'variants/red/texture.png': png(32, 32),
       'variants/blue/texture.png': png(32, 32).map((b, i) => (i === 40 ? 1 : b)),
       'animations.json': HAT_ANIM,
-      'settings.json': [{ type: 'VARIANTS', id: 'UNUSED', enabled: true, data: { variants: [{ name: 'blue', color: 255 }, { name: 'red', color: 16711680 }] } }],
+      // colour variants; can't be worn with wings; a helmet hides it ("armor hides cosmetics")
+      'settings.json': [
+        { type: 'VARIANTS', id: 'UNUSED', enabled: true, data: { variants: [{ name: 'blue', color: 255 }, { name: 'red', color: 16711680 }] } },
+        { type: 'MUTUALLY_EXCLUSIVE', id: 'UNUSED', enabled: true, data: { slots: ['WINGS'] } },
+        { type: 'ARMOR_HANDLING', id: 'TEST_HAT', enabled: true, data: { head: true } },
+      ],
     },
   },
   {

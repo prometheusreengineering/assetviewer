@@ -1,7 +1,8 @@
 // Essential in the app: the setup panel, then the viewer's own (here: in-memory) files.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../src/App.vue'
-import { connect, forget } from '../../src/providers/essential'
+import { Group } from 'three'
+import { connect, essentialProvider, forget } from '../../src/providers/essential'
 import { memorySource } from '../../src/providers/essential/localData'
 import { essentialFixture } from '../fixtures/essential'
 import { installBitmapStubs } from '../helpers/bitmaps'
@@ -58,6 +59,9 @@ describe('Essential setup', () => {
     const [dumpsInput, cacheInput] = $$<HTMLInputElement>('.setup input[type=file]')
     expect(byText('Show my cosmetics', 'button')!.hasAttribute('disabled')).toBe(true)
     pick(dumpsInput!, 'dumps', fx.dumps)
+    await settle()
+    // Both folders are needed.
+    expect(byText('Show my cosmetics', 'button')!.hasAttribute('disabled')).toBe(true)
     pick(cacheInput!, 'cosmetic-cache', fx.cache)
     await settle()
     expect($('.setup .picked')!.textContent).toContain('6 files')
@@ -76,5 +80,30 @@ describe('Essential setup', () => {
     const sel = $('.p-dialog .variant')
     expect(sel).not.toBeNull()
     expect(sel!.textContent).toContain('blue')
+  })
+
+  it('outfit builder: Essential emotes as poses, armor pieces and mode, and mutually exclusive slots', async () => {
+    await connect({ dumps: memorySource(fx.dumps), cache: memorySource(fx.cache) })
+    const blank = () => ({ object: new Group(), files: [], frames: 1, states: [], state: '', setState() {}, tick() {}, dispose() {} })
+    const dress = vi.spyOn(essentialProvider, 'dressPlayer').mockImplementation(async () => blank())
+    localStorage.removeItem('assetviewer.outfit.armor.essential')
+    await mountApp(App, { path: '/essential/outfit?o=hat:TEST_HAT' })
+    await settle(30)
+    // the pose picker lists Essential's emote category
+    expect($('.controls .pose')).not.toBeNull()
+    expect(dress).toHaveBeenLastCalledWith([essentialProvider.itemById!('TEST_HAT')], undefined, { armor: [], armorMode: 'armor' })
+    byText('Helmet', 'button')!.click()
+    byText('Boots', 'button')!.click()
+    await settle(10)
+    expect(dress).toHaveBeenLastCalledWith(expect.any(Array), undefined, { armor: ['helmet', 'boots'], armorMode: 'armor' })
+    expect(JSON.parse(localStorage.getItem('assetviewer.outfit.armor.essential')!)).toEqual({ pieces: ['helmet', 'boots'], mode: 'armor' })
+    // Random fills every slot; the wings can't be worn with the hat (the hat's slot is kept: its dice is on too, it comes first)
+    byText('Random', 'button')!.click()
+    await settle(20)
+    expect($('.note')!.textContent).toContain("Test Wings (can't be worn with Test Hat)")
+    const worn = (dress.mock.lastCall![0] as { id: string }[]).map((i) => i.id).sort()
+    expect(worn).toContain('TEST_HAT')
+    expect(worn).not.toContain('TEST_WINGS')
+    dress.mockRestore()
   })
 })
