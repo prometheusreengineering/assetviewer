@@ -1,4 +1,4 @@
-import { del, get, set } from 'idb-keyval'
+import { createStore, del, get, set, type UseStore } from 'idb-keyval'
 import { Box3, Group, Vector3, type Object3D } from 'three'
 import { ref } from 'vue'
 import { getUrlBuffer } from '../../cdn'
@@ -22,10 +22,14 @@ import { armorHiddenBones, blockedArmor, boneSide, defaultSide, exclusiveCategor
 import { buildEmote, emoteSequence, type EmoteOutfit, type EssentialEmoteFile } from './emote'
 import type { SoundDefinitions } from './sounds'
 import { assetBytes, handleSource, listingSource, readDumps, resolveFolders, subSource, type EssentialFolders } from './localData'
+import { dropLegacy, readLegacy } from './legacyStore'
 
 export const EVERYTHING = 'everything'
 export const OUTFIT = 'outfit'
 const HANDLE_KEY = 'assetviewer.essential.dir'
+// Our own database (opened on first use: not every environment has IndexedDB).
+let kvStore: UseStore | undefined
+const kv = () => (kvStore ??= createStore('assetviewer-essential', 'kv'))
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary']
 // Essential's BedrockModel.TEXTURE_ANIMATION_FPS
 const TEXTURE_FPS = 7
@@ -63,7 +67,7 @@ export async function pickFolder(): Promise<void> {
   const handle = await pick({ id: 'essential', mode: 'read' })
   await connect(await resolveFolders(handleSource(handle)))
   try {
-    await set(HANDLE_KEY, handle)
+    await set(HANDLE_KEY, handle, kv())
   } catch {}
 }
 
@@ -71,7 +75,7 @@ export async function pickFolder(): Promise<void> {
 export async function reconnect(ask: boolean): Promise<boolean> {
   let handle: DirHandle | undefined
   try {
-    handle = await get<DirHandle>(HANDLE_KEY)
+    handle = await get<DirHandle>(HANDLE_KEY, kv())
   } catch {
     return false
   }
@@ -89,11 +93,35 @@ interface StoredFile {
   path: string
   file: Blob
 }
+/**
+ * A folder's files as ONE Blob plus `[path, start, end]` rows. Thousands of separate Blobs in a record crash
+ * Chrome when the record is deleted or overwritten (see legacyStore.ts); one composed Blob is a single file.
+ */
+interface Pack {
+  blob: Blob
+  index: [string, number, number][]
+}
+interface StoredCopy {
+  dumps: Pack
+  cache?: Pack
+}
 /** Picked files with their path inside the picked folder (stored files lose `webkitRelativePath`). */
 const entries = (files: Iterable<File>): StoredFile[] => [...files].map((f) => ({ path: (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name, file: f }))
 function entrySource(list: StoredFile[]) {
   const map = new Map(list.map((e) => [e.path, e.file]))
   return listingSource([...map.keys()], async (p) => map.get(p)?.arrayBuffer())
+}
+function pack(list: StoredFile[]): Pack {
+  let end = 0
+  const index = list.map((e): [string, number, number] => [e.path, end, (end += e.file.size)])
+  return { blob: new Blob(list.map((e) => e.file)), index }
+}
+function packSource(p: Pack) {
+  const map = new Map(p.index.map(([path, start, end]) => [path, [start, end] as const]))
+  return listingSource([...map.keys()], async (path) => {
+    const r = map.get(path)
+    return r && p.blob.slice(r[0], r[1]).arrayBuffer()
+  })
 }
 
 /**
@@ -106,7 +134,7 @@ export async function connectFiles(dumps: Iterable<File>, cache?: Iterable<File>
   await connect({ dumps: entrySource(d), cache: c.length ? entrySource(c) : undefined })
   if (!remember) return
   try {
-    await set(COPY_KEY, { dumps: d, cache: c })
+    await set(COPY_KEY, { dumps: pack(d), cache: c.length ? pack(c) : undefined } satisfies StoredCopy, kv())
     essentialState.value = { ...essentialState.value, remembered: true }
   } catch (err) {
     essentialState.value = { ...essentialState.value, error: `Could not keep a copy: ${err}` }
@@ -115,23 +143,43 @@ export async function connectFiles(dumps: Iterable<File>, cache?: Iterable<File>
 
 /** Connects the copy kept by `connectFiles(..., remember)`, if any. */
 async function restoreCopy(): Promise<boolean> {
-  let stored: { dumps?: StoredFile[]; cache?: StoredFile[] } | undefined
+  let stored: StoredCopy | undefined
   try {
-    stored = await get(COPY_KEY)
+    stored = await get<StoredCopy>(COPY_KEY, kv())
   } catch {
     return false
   }
-  if (!stored?.dumps?.length) return false
-  await connect({ dumps: entrySource(stored.dumps), cache: stored.cache?.length ? entrySource(stored.cache) : undefined })
+  if (!stored?.dumps?.index.length) return false
+  await connect({ dumps: packSource(stored.dumps), cache: stored.cache?.index.length ? packSource(stored.cache) : undefined })
   essentialState.value = { ...essentialState.value, remembered: true }
   return true
 }
 
+/** Moves the remembered folder and files of the first version (idb-keyval's default database) into ours. */
+async function migrateLegacy(): Promise<void> {
+  let old: Map<string, unknown> | undefined
+  try {
+    old = await readLegacy([HANDLE_KEY, COPY_KEY])
+  } catch {
+    return
+  }
+  if (!old) return
+  try {
+    const handle = old.get(HANDLE_KEY)
+    if (handle) await set(HANDLE_KEY, handle, kv())
+    const copy = old.get(COPY_KEY) as { dumps?: StoredFile[]; cache?: StoredFile[] } | undefined
+    if (copy?.dumps?.length) await set(COPY_KEY, { dumps: pack(copy.dumps), cache: copy.cache?.length ? pack(copy.cache) : undefined } satisfies StoredCopy, kv())
+  } catch {}
+  // Only now: the packs above were written from the old blobs.
+  dropLegacy()
+}
+
 export async function forget(): Promise<void> {
   try {
-    await del(HANDLE_KEY)
-    await del(COPY_KEY)
+    await del(HANDLE_KEY, kv())
+    await del(COPY_KEY, kv())
   } catch {}
+  dropLegacy()
   folders = undefined
   catalog = undefined
   settingsCache.clear()
@@ -459,6 +507,7 @@ export const essentialProvider: CosmeticProvider = {
   async load() {
     if (catalog) return
     try {
+      await migrateLegacy()
       if (!(await reconnect(false))) await restoreCopy()
     } catch (err) {
       essentialState.value = { ...essentialState.value, error: String(err) }
