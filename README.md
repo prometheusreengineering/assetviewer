@@ -70,6 +70,7 @@ the same through the Vite dev server.
 ## Disclaimer
 
 This project is intended for educational purposes only. We are not responsible for any damage caused by this project.
+
 Assets belong to their respective owners. This project is not affiliated with Lunar Client, Moonsworth, Dawn Client, Essential or ModCore.
 
 This project was made almost entirely with Claude Opus 5.5 on Medium/High effort.
