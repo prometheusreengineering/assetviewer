@@ -4,6 +4,7 @@
 // idb-keyval connection would stay open and block the delete) and the whole database is dropped, which survives.
 const DB = 'keyval-store'
 const STORE = 'keyval'
+const OPEN_TIMEOUT = 3000
 
 const idb = (): IDBFactory | undefined => (typeof indexedDB === 'undefined' ? undefined : indexedDB)
 
@@ -13,13 +14,33 @@ export async function readLegacy(keys: string[]): Promise<Map<string, unknown> |
   if (!f) return undefined
   // Opening a missing database would create it: ask first where the browser can tell.
   if (f.databases && !(await f.databases()).some((d) => d.name === DB)) return undefined
-  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+  // A pending delete (dropLegacy) waits for every connection to close, and an open waits behind it: another tab
+  // still running the old code (idb-keyval never closes its connection) keeps it pending forever. Give up then;
+  // the next load tries again.
+  const db = await new Promise<IDBDatabase | undefined>((resolve, reject) => {
     const r = f.open(DB)
-    r.onsuccess = () => resolve(r.result)
-    r.onerror = () => reject(r.error)
+    let late = false
+    const timer = setTimeout(() => ((late = true), resolve(undefined)), OPEN_TIMEOUT)
+    r.onsuccess = () => {
+      clearTimeout(timer)
+      // Opened after we gave up (the delete went through and this open made an empty database): close and drop it.
+      if (!late) return resolve(r.result)
+      r.result.close()
+      dropLegacy()
+    }
+    r.onerror = () => {
+      clearTimeout(timer)
+      reject(r.error)
+    }
   })
+  if (!db) return undefined
+  if (!db.objectStoreNames.contains(STORE)) {
+    // empty (made by an open like the one above): nothing to move
+    db.close()
+    dropLegacy()
+    return undefined
+  }
   try {
-    if (!db.objectStoreNames.contains(STORE)) return undefined
     const tx = db.transaction(STORE, 'readonly')
     const values = await Promise.all(
       keys.map(
