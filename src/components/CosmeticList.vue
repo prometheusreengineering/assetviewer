@@ -19,7 +19,18 @@ const size = (it: CosmeticItem) => (typeof it.fields.size === 'number' && it.fie
       <span>File</span>
       <span class="num">Size</span>
     </div>
-    <div v-for="it in items" :key="it.id" class="row" :class="{ selected: selected.has(it.id), gray: grayOf(it.id) }" @click="$emit('open', it)">
+    <div
+      v-for="it in items"
+      :key="it.id"
+      class="row"
+      :class="{ selected: selected.has(it.id), gray: grayOf(it.id) }"
+      tabindex="0"
+      role="button"
+      :aria-label="it.name"
+      @click="$emit('open', it)"
+      @keydown.enter.self="$emit('open', it)"
+      @keydown.space.self.prevent="$emit('open', it)"
+    >
       <span @click.stop><Checkbox :model-value="selected.has(it.id)" binary @update:model-value="$emit('select', it.id)" /></span>
       <span class="name" :title="it.name">{{ it.name }}</span>
       <span>{{ it.fields.category }}</span>
@@ -39,4 +50,11 @@ const size = (it: CosmeticItem) => (typeof it.fields.size === 'number' && it.fie
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .row.selected { background: color-mix(in srgb, var(--p-primary-color) 14%, transparent); }
 .row.gray { opacity: 0.45; }
+.row:focus-visible { outline: 2px solid var(--p-primary-color); outline-offset: -2px; }
+/* Type and File give way to the name on a phone. */
+@media (max-width: 768px) {
+  .list { padding: 0.5rem; }
+  .row { grid-template-columns: 2rem minmax(0, 2fr) minmax(0, 1fr) 4.5rem; gap: 0.5rem; }
+  .row > :nth-child(4), .row > :nth-child(5) { display: none; }
+}
 </style>
