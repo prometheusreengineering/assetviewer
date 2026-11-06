@@ -34,8 +34,21 @@ async function fetchCached(url: string): Promise<ArrayBuffer> {
     cache = undefined
   }
   const res = await fetchRetry(url)
-  cache?.put(url, res.clone()).catch(() => {})
-  return res.arrayBuffer()
+  const copy = res.clone()
+  const buf = await res.arrayBuffer()
+  // Kept forever, so it has to be what the URL promises. Wrong bytes are still shown, just not remembered.
+  if (await matchesUrlHash(url, buf)) cache?.put(url, copy).catch(() => {})
+  else console.warn(`Not caching ${url}: its content doesn't match the hash`)
+  return buf
+}
+
+/** True unless the URL names a sha1 (`?h=`) that the bytes don't have. */
+async function matchesUrlHash(url: string, buf: ArrayBuffer): Promise<boolean> {
+  const want = /[?&]h=([0-9a-f]{40})\b/.exec(url)?.[1]
+  // crypto.subtle only exists on https and localhost.
+  if (!want || !globalThis.crypto?.subtle) return true
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', buf))
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('') === want
 }
 
 function dedupe(url: string): Promise<ArrayBuffer> {
