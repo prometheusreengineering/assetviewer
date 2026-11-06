@@ -310,6 +310,9 @@ async function openEverything(count: number) {
   if (ok) router.push(`/${props.provider}/everything`)
 }
 
+// Ids the catalog doesn't know (an item that was removed, a foreign import) are kept but not counted: they never show.
+const knownCount = (ids: string[]) => ids.filter((id) => provider.value.itemById?.(id)).length
+
 const menuModel = computed(() => {
   const groups = new Map<string, object[]>()
   for (const c of categories.value) {
@@ -331,7 +334,7 @@ const menuModel = computed(() => {
   const toolsGroup = tools < 0 ? undefined : model.splice(tools, 1)[0]
   if (provider.value.available) {
     const lists: { label: string; icon: string; class: string; command: () => void }[] = collections.value.all().map((c) => ({
-      label: `${c.name} (${c.items.length})`,
+      label: `${c.name} (${knownCount(c.items)})`,
       icon: 'pi pi-bookmark',
       class: props.category === COLLECTION_PREFIX + c.id ? 'cat-active' : '',
       command: () => void router.push(`/${props.provider}/${COLLECTION_PREFIX}${c.id}`),
@@ -367,7 +370,7 @@ const menuModel = computed(() => {
       <template v-else>
       <div v-if="collection" class="collbar">
         <h2 class="collname icon-text"><i class="pi pi-bookmark-fill" />{{ collection.name }}</h2>
-        <span class="collcount">{{ plural(collection.items.length, 'item') }}</span>
+        <span class="collcount">{{ plural(allItems.length, 'item') }}</span>
         <span class="collactions">
           <Button label="Rename" icon="pi pi-pencil" size="small" severity="secondary" @click="renameCollection" />
           <Button v-if="collection.id !== 'fav'" label="Delete" icon="pi pi-trash" size="small" severity="secondary" @click="deleteCollection" />
