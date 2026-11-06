@@ -72,8 +72,8 @@ git tag v1.2.3
 git push --atomic origin main v1.2.3
 ```
 
-Every other branch gets a preview at `<branch>-assetviewer.<subdomain>.workers.dev` (link in the run summary); previews never touch
-production. The workflow needs the repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `PRIMEUI_LICENSE`.
+Every other branch gets a preview at `<branch>-assetviewer.<subdomain>.workers.dev` once its tests pass (link in the run summary);
+previews never touch production. The workflow needs the repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `PRIMEUI_LICENSE`.
 The site is static except `worker/`, which proxies `/dawn/*` to Dawn's asset CDN (it sends no CORS headers); `npm run dev` does
 the same through the Vite dev server.
 

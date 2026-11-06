@@ -138,10 +138,14 @@ jobs:
           wranglerVersion: '4'
           command: deploy
 
-  # Every branch but main gets a preview version on workers.dev, next to the tests rather than after them:
+  # Every branch but main gets a preview version on workers.dev once the tests passed (or the same files passed before).
   # `versions upload` never touches production, which keeps serving the last release.
   preview:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/main'
+    needs: [check, test]
+    # always(): a skipped `test` would otherwise skip this job too.
+    if: >-
+      always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/main' &&
+      (needs.test.result == 'success' || needs.check.outputs.hit == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # A newer push to the same branch replaces an upload still in progress.
