@@ -5,6 +5,7 @@ import Slider from 'primevue/slider'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { notify } from '../dialogs'
 import type { ArmorMode, ArmorPiece, CosmeticProvider, Timeline } from '../providers/types'
 import { skinName } from '../skin'
 import { autoRotate, freeRotate } from '../viewPrefs'
@@ -187,7 +188,11 @@ function clearOutfit() {
 }
 const copied = ref(false)
 async function copyLink() {
-  await navigator.clipboard.writeText(location.href)
+  try {
+    await navigator.clipboard.writeText(location.href)
+  } catch {
+    return notify('Could not copy the link', 'The browser blocked clipboard access. Copy it from the address bar instead.', 'pi pi-exclamation-triangle')
+  }
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }

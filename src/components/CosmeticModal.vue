@@ -230,7 +230,11 @@ onBeforeUnmount(teardown)
 
 const copied = ref(false)
 async function copyLink() {
-  await navigator.clipboard.writeText(location.href)
+  try {
+    await navigator.clipboard.writeText(location.href)
+  } catch {
+    return notify('Could not copy the link', 'The browser blocked clipboard access. Copy it from the address bar instead.', 'pi pi-exclamation-triangle')
+  }
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
