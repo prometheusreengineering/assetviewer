@@ -41,6 +41,8 @@ watchEffect(async () => {
   void reloadKey.value
   ready.value = false
   error.value = ''
+  // Until this provider has loaded, the footer mustn't keep showing the previous one's numbers.
+  stats.value = undefined
   if (!provider.value.available) return
   try {
     await provider.value.load()
