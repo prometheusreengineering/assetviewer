@@ -224,4 +224,9 @@ const rows = computed(() => {
 .fields th, .fields td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--av-border); word-break: break-word; vertical-align: top; }
 .fields th:first-child { width: 9rem; opacity: 0.6; font-weight: normal; }
 .fields tr.differs td { background: color-mix(in srgb, var(--p-primary-color) 12%, transparent); }
+/* !important: the column count is set inline from the number of items. */
+@media (max-width: 768px) {
+  .stage { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: 60vh; }
+  .fields th:first-child { width: 5rem; }
+}
 </style>

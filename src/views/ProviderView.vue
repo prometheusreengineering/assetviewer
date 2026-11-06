@@ -286,7 +286,7 @@ const compare = () => router.replace({ query: { ...route.query, cmp: actionItems
 
 // Cards per row (zoom): fewer columns means bigger previews.
 const COLS_KEY = 'assetviewer.cols'
-const cols = ref(6)
+const cols = ref(window.matchMedia?.('(max-width: 768px)').matches ? 2 : 6)
 try {
   const saved = Number(localStorage.getItem(COLS_KEY))
   if (saved >= 2 && saved <= 12) cols.value = saved
@@ -310,6 +310,10 @@ async function openEverything(count: number) {
   if (ok) router.push(`/${props.provider}/everything`)
 }
 
+// On a phone the sidebar folds behind a button (it would fill the screen) and closes once a page is picked.
+const menuOpen = ref(false)
+watch(() => [props.provider, props.category], () => (menuOpen.value = false))
+const pageLabel = computed(() => (isHome.value ? 'Home' : collection.value?.name ?? categories.value.find((c) => c.id === props.category)?.label ?? 'Menu'))
 // Ids the catalog doesn't know (an item that was removed, a foreign import) are kept but not counted: they never show.
 const knownCount = (ids: string[]) => ids.filter((id) => provider.value.itemById?.(id)).length
 
@@ -350,9 +354,14 @@ const menuModel = computed(() => {
 <template>
   <div class="layout">
     <aside class="side">
-      <ProviderSwitch :provider="provider.id" />
-      <div class="side-menu"><Menu v-if="ready" :model="menuModel" /></div>
-      <SideControls />
+      <ProviderSwitch :provider="provider.id" class="side-switch" />
+      <button type="button" class="menu-toggle" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+        <i class="pi pi-bars" /><span class="menu-label">{{ pageLabel }}</span><i class="pi pi-chevron-down chev" />
+      </button>
+      <div class="side-body" :class="{ open: menuOpen }">
+        <div class="side-menu"><Menu v-if="ready" :model="menuModel" /></div>
+        <SideControls />
+      </div>
     </aside>
     <section class="main">
       <div v-if="!provider.available" class="center">
@@ -421,6 +430,9 @@ const menuModel = computed(() => {
 .m { margin: 1rem; }
 .layout { display: flex; flex: 1; min-height: 0; }
 .side { width: 250px; display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem; border-right: 1px solid var(--av-border); }
+/* Only a wrapper for the phone layout; on a desktop its children are the sidebar's own rows. */
+.side-body { display: contents; }
+.menu-toggle { display: none; }
 .side-menu { flex: 1; min-height: 0; overflow-y: auto; }
 .side :deep(.p-menu) { width: 100%; border: 0; background: transparent; }
 .side :deep(.cat-active .p-menu-item-content) { background: var(--av-border); color: var(--p-primary-color); }
@@ -437,4 +449,19 @@ const menuModel = computed(() => {
 .count { margin-left: auto; opacity: 0.6; }
 .zoom { display: flex; align-items: center; gap: 0.6rem; opacity: 0.85; }
 .slider { width: 9rem; }
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  /* Without the min-height the grid would grow to its full length, and the shared canvas with it. */
+  .main { min-height: 0; }
+  .side { width: 100%; flex-shrink: 0; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 0.5rem; padding: 0.5rem; border-right: 0; border-bottom: 1px solid var(--av-border); }
+  .side-switch { flex: 1 1 8rem; min-width: 0; }
+  .menu-toggle { flex: 1 1 8rem; min-width: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0 0.8rem; background: var(--av-card); color: var(--av-text); border: 1px solid var(--av-border); border-radius: 8px; font: inherit; cursor: pointer; }
+  .menu-label { flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-body { display: none; flex-basis: 100%; }
+  .side-body.open { display: flex; flex-direction: column; gap: 0.75rem; max-height: 60vh; overflow-y: auto; }
+  .side-menu { flex: none; overflow: visible; }
+  .toolbar, .collbar { padding: 0.5rem; gap: 0.5rem; }
+  .collactions { margin-left: 0; }
+  .slider { width: 6rem; }
+}
 </style>

@@ -325,4 +325,9 @@ onBeforeUnmount(() => {
 .pose { width: 13rem; }
 .scrub { width: 10rem; }
 .count { margin-left: auto; opacity: 0.6; }
+@media (max-width: 768px) {
+  .outfit { flex-direction: column; overflow-y: auto; }
+  .slots { width: 100%; max-height: 40vh; flex-shrink: 0; border-right: 0; border-bottom: 1px solid var(--av-border); }
+  .stage { flex: 1 0 50vh; }
+}
 </style>

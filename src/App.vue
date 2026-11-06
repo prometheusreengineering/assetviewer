@@ -33,4 +33,9 @@ const about = computed(() => (providers[String(route.params.provider)] ?? provid
 .foot .sec + .sec { border-left: 1px solid var(--av-border); }
 .foot a { color: inherit; }
 .stats code { margin-left: 0.4rem; }
+@media (max-width: 768px) {
+  .foot { grid-template-columns: minmax(0, 1fr) auto; }
+  .foot .sec { padding: 0.3rem 0.6rem; font-size: 0.7rem; }
+  .foot .stats { display: none; }
+}
 </style>

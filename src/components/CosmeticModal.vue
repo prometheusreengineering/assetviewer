@@ -435,4 +435,9 @@ label { display: flex; align-items: center; gap: 0.5rem; }
 .pair.wide { grid-column: 1 / -1; }
 .info dt { opacity: 0.6; }
 .info dd { margin: 0; word-break: break-all; }
+@media (max-width: 768px) {
+  .stage { height: 45vh; }
+  .info { grid-template-columns: minmax(0, 1fr); }
+  .scrub { width: 7rem; }
+}
 </style>
