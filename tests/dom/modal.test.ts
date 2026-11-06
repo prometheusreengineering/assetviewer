@@ -34,6 +34,105 @@ async function open(item = ITEMS[0]!, provider = fakeProvider()) {
   return { ...m, provider }
 }
 
+describe('CosmeticModal: pose picker and late results', () => {
+  const dressable = (extra: Record<string, unknown> = {}) => {
+    const p = fakeProvider([...ITEMS, { id: 'pose1', name: 'Pose In Own Category', category: 'emote', render: '3d', fields: {} }])
+    p.dressPlayer = vi.fn(async () => fakeModel())
+    return Object.assign(p, extra)
+  }
+  const poseOptions = async () => {
+    press($('.pose')!)
+    await settle()
+    return $$('.p-select-option').map((e) => e.textContent)
+  }
+
+  it("offers the provider's own pose category", async () => {
+    showOnPlayer.value = true
+    await open(ITEMS[0], dressable({ emoteCategory: 'emote' }))
+    expect(await poseOptions()).toEqual(['Pose In Own Category'])
+  })
+
+  it("defaults to Lunar Client's category when the provider names none", async () => {
+    showOnPlayer.value = true
+    await open(ITEMS[0], dressable())
+    expect(await poseOptions()).toEqual(['Emote One'])
+  })
+
+  it("offers no poses to a provider that can't pose an outfit", async () => {
+    showOnPlayer.value = true
+    await open(ITEMS[0], dressable({ emoteCategory: null }))
+    expect($('.pose')).toBeNull()
+  })
+
+  // A pinned modal can move to another item while the first still loads.
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void
+    let reject!: (e: unknown) => void
+    const promise = new Promise<T>((res, rej) => ((resolve = res), (reject = rej)))
+    return { promise, resolve, reject }
+  }
+
+  it('a slow image arriving after moving on is ignored', async () => {
+    const provider = fakeProvider()
+    const slow = deferred<string>()
+    provider.imageUrl = vi.fn(() => slow.promise)
+    const { wrapper } = await open(ITEMS[1], provider)
+    await wrapper.setProps({ item: ITEMS[2] })
+    await settle(30)
+    slow.resolve('blob:stale')
+    await settle(30)
+    expect($('pre.code')!.textContent).toBe('{"hello": 1}')
+    expect($('.stage img')).toBeNull()
+  })
+
+  it('a slow file arriving after moving on is ignored', async () => {
+    const provider = fakeProvider()
+    const slow = deferred<{ name: string; url: string; text: string; size: number }>()
+    provider.rawFile = vi.fn(() => slow.promise)
+    const { wrapper } = await open(ITEMS[2], provider)
+    await wrapper.setProps({ item: ITEMS[1] })
+    await settle(30)
+    slow.resolve({ name: 'stale.json', url: 'u', text: 'stale', size: 5 })
+    await settle(30)
+    expect($('pre.code')).toBeNull()
+  })
+
+  it("an earlier item's failure doesn't show on the current one", async () => {
+    const provider = fakeProvider()
+    const slow = deferred<never>()
+    provider.imageUrl = vi.fn(() => slow.promise)
+    const { wrapper } = await open(ITEMS[1], provider)
+    await wrapper.setProps({ item: ITEMS[2] })
+    await settle(30)
+    slow.reject(new Error('stale failure'))
+    await settle(30)
+    expect($('.err')).toBeNull()
+  })
+})
+
+describe('CosmeticModal: giving back and exporting', () => {
+  it('closing gives the WebGL context back', async () => {
+    const { wrapper } = await open()
+    const r = FakeWebGLRenderer.instances[0]!
+    await wrapper.setProps({ item: null })
+    expect(r.disposed).toBe(true)
+    expect(r.forceContextLoss).toHaveBeenCalled()
+  })
+
+  it('tells the viewer when the clipboard refuses', async () => {
+    const { dialog } = await import('../../src/dialogs')
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => { throw new Error('denied') }) } })
+    await open()
+    press(byText('Copy link', 'button'))
+    await settle(10)
+    expect(dialog.value?.title).toBe('Could not copy the link')
+    dialog.value = undefined
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
+    else delete (navigator as unknown as { clipboard?: unknown }).clipboard
+  })
+})
+
 describe('CosmeticModal', () => {
   it('3D: loads the model into its own renderer with info rows and a download menu', async () => {
     const { provider } = await open()
