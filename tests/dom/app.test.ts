@@ -1,6 +1,7 @@
 // The whole app (App + ProviderView + the real Lunar provider) on the fixture CDN.
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../src/App.vue'
+import { lunarProvider } from '../../src/providers/lunar'
 import { clearSelection } from '../../src/selection'
 import { useCollections } from '../../src/collections'
 import { dialog } from '../../src/dialogs'
@@ -43,6 +44,7 @@ const menu = () => $$('.side .p-menu-item-label').map((e) => e.textContent!.trim
 const menuItem = (label: string) => $$('.side .p-menu-item-content').find((e) => e.textContent!.trim().startsWith(label))!
 const count = () => $('.toolbar .count')!.textContent
 const cards = () => $$('.card .name').map((e) => e.textContent)
+const useLunarId = (name: string | null) => lunarProvider.items('hat').find((it) => it.name === name)!.id
 
 describe('app shell', () => {
   it('/lunar goes home; the sidebar lists Home, Everything, cosmetics, resources, collections, tools', async () => {
@@ -78,6 +80,74 @@ describe('app shell', () => {
   it('old all-files links redirect to everything', async () => {
     const { router } = await open('/lunar/all-files')
     expect(router.currentRoute.value.path).toBe('/lunar/everything')
+  })
+})
+
+describe('links and failures', () => {
+  it('an unknown address goes to the app instead of a blank page', async () => {
+    const { router } = await open('/nonsense')
+    expect(router.currentRoute.value.path).toBe('/lunar/home')
+    expect($('.side')).toBeTruthy()
+  })
+
+  it('a malformed filter link is ignored and the items still show', async () => {
+    const bad = btoa(JSON.stringify([['category', 'any', 'Hats']])).replace(/=+$/, '')
+    await open(`/lunar/hat?f=${bad}`)
+    expect(cards().length).toBe(3)
+    expect($('.chips')).toBeNull()
+  })
+
+  it('a text op on a list field shows and can be edited without breaking the page', async () => {
+    const odd = btoa(JSON.stringify([['category', 'contains', 'Hats']])).replace(/=+$/, '')
+    await open(`/lunar/hat?f=${odd}`)
+    expect(cards().length).toBe(3)
+    expect($('.chips .chip')!.textContent).toContain('Hats')
+    press($('.chips .chip'))
+    await settle(10)
+    expect($('.side')).toBeTruthy()
+  })
+
+  it("a shared link's sort applies without replacing the remembered one", async () => {
+    const key = 'assetviewer.sort.lunar.cloak'
+    const mine = JSON.stringify([{ field: 'name', dir: 'desc' }])
+    localStorage.setItem(key, mine)
+    await open('/lunar/cloak?s=name:asc')
+    expect($('.sortchip')!.textContent).toContain('Name ↑')
+    await settle(5)
+    expect(localStorage.getItem(key)).toBe(mine)
+  })
+
+  it('a corrupt remembered sort is dropped', async () => {
+    localStorage.setItem('assetviewer.sort.lunar.cloak', JSON.stringify([null, { field: 'name', dir: 'sideways' }, 3]))
+    await open('/lunar/cloak')
+    expect($('.sortchip')).toBeNull()
+    expect(cards().length).toBeGreaterThan(0)
+  })
+
+  it('a collection counts only the items that exist', async () => {
+    const c = useCollections('lunar')
+    const known = $$('.card').length // nothing mounted yet
+    expect(known).toBe(0)
+    const { router } = await open('/lunar/hat')
+    const real = cards()[0]!
+    const id = useLunarId(real)
+    c.set('fav', id, true)
+    c.set('fav', 'no-such-item', true)
+    await router.push('/lunar/col-fav')
+    await settle(20)
+    expect(menu()).toContain('Favorites (1)')
+    expect($('.collcount')!.textContent).toBe('1 item')
+    // the unknown id is kept, in case it comes back
+    expect(c.get('fav')!.items).toContain('no-such-item')
+  })
+
+  it('the footer drops the numbers of a provider that failed to load', async () => {
+    const { router } = await open('/lunar/home')
+    expect(stats.value?.name).toBe('Lunar Client')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    await router.push('/dawn/home')
+    await settle(20)
+    expect(stats.value).toBeUndefined()
   })
 })
 
