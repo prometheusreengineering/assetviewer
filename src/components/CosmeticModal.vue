@@ -105,12 +105,18 @@ async function open(item: CosmeticItem) {
   void props.provider.ensureDimensions?.([item], () => {}, new AbortController().signal).then(() => dimTick.value++)
   try {
     if (item.render === 'file') {
-      raw.value = await props.provider.rawFile!(item)
+      const file = await props.provider.rawFile!(item)
+      // A pinned modal can move on to another item while this one loads.
+      if (mine === token) raw.value = file
       return
     }
     if (item.render === 'image') {
-      imgFrames.value = item.fields.animated ? await props.provider.imageFrames?.(item) : undefined
-      imgSrc.value = await props.provider.imageUrl(item)
+      const frames = item.fields.animated ? await props.provider.imageFrames?.(item) : undefined
+      const src = await props.provider.imageUrl(item)
+      if (mine === token) {
+        imgFrames.value = frames
+        imgSrc.value = src
+      }
       return
     }
     const emote = playerEmoteId.value ? props.provider.itemById?.(playerEmoteId.value) : undefined
@@ -194,7 +200,7 @@ async function open(item: CosmeticItem) {
     }
     raf = requestAnimationFrame(loop)
   } catch (e) {
-    error.value = String(e)
+    if (mine === token) error.value = String(e)
   } finally {
     if (mine === token) loading.value = false
   }
