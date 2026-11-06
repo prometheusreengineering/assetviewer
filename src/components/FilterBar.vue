@@ -9,7 +9,7 @@ import Popover from 'primevue/popover'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { OPS, type Rule, type SortKey } from '../filtering'
+import { OPS, toArray, type Rule, type SortKey } from '../filtering'
 import type { FieldDef } from '../providers/types'
 
 const props = defineProps<{ fields: FieldDef[]; measuring?: { done: number; total: number } }>()
@@ -39,7 +39,9 @@ function blank(field: string): Rule {
 }
 function openFilter(e: Event, rule?: Rule) {
   editing.value = !!rule
-  draft.value = rule ? { ...rule, value: Array.isArray(rule.value) ? [...rule.value] : rule.value } : blank(props.fields[0]!.key)
+  // A linked rule's value may not suit its field (a text op on a list field): the list editor needs a list.
+  const list = rule && (Array.isArray(rule.value) || byKey.value.get(rule.field)?.type === 'multi')
+  draft.value = rule ? { ...rule, value: list ? [...toArray(rule.value)] : rule.value } : blank(props.fields[0]!.key)
   const target = e.currentTarget as HTMLElement
   filterPop.value!.hide()
   setTimeout(() => filterPop.value!.show(e, target), 0)
@@ -65,7 +67,7 @@ const onSortChip = (e: Event) => !(e.target as HTMLElement).closest('.p-chip-rem
 function fmt(v: unknown, def: FieldDef): string {
   if (def.type === 'date') return typeof v === 'number' ? new Date(v).toISOString().slice(0, 10) : '…'
   if (def.type === 'number') return v === null || v === undefined ? '…' : Number(v).toLocaleString()
-  if (def.type === 'multi') return (v as string[]).join(', ') || '…'
+  if (def.type === 'multi') return toArray(v).join(', ') || '…'
   return String(v ?? '')
 }
 function describe(r: Rule): string {
