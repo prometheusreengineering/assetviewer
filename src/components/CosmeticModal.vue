@@ -8,8 +8,8 @@ import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
-import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download, zipFiles } from '../download'
 import { releaseRenderer } from '../three/releaseRenderer'
@@ -120,11 +120,7 @@ async function open(item: CosmeticItem) {
       return
     }
     const emote = playerEmoteId.value ? props.provider.itemById?.(playerEmoteId.value) : undefined
-    const [loaded, { TrackballControls }, { OrbitControls }] = await Promise.all([
-      dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item),
-      import('three/examples/jsm/controls/TrackballControls.js'),
-      import('three/examples/jsm/controls/OrbitControls.js'),
-    ])
+    const loaded = await (dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item))
     await nextTick()
     const host = canvasHost.value
     if (!host || mine !== token) {
