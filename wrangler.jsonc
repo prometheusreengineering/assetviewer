@@ -1,8 +1,12 @@
-// Cloudflare Workers Builds deploys this on every push to main (build: npm run build, deploy: npx wrangler deploy).
+// The deploy job in .github/workflows/ci.yml deploys this when a v* tag is pushed and the tests pass (npm run build, then wrangler deploy).
 {
   "name": "assetviewer",
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
+  // Branch previews (`wrangler versions upload --preview-alias`) get <alias>-assetviewer.<subdomain>.workers.dev.
+  "preview_urls": true,
+  // Production hostname; `wrangler deploy` creates its DNS record and certificate (the zone is on the same account).
+  "routes": [{ "pattern": "assetviewer.prometheusreengineer.ing", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

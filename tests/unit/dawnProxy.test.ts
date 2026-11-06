@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { handle, ORIGIN } from '../../worker/dawnProxy'
 
 const H = 'a'.repeat(40)
-const req = (path: string, init?: RequestInit) => new Request('https://assetviewer.dreamys.studio' + path, init)
+const req = (path: string, init?: RequestInit) => new Request('https://assetviewer.prometheusreengineer.ing' + path, init)
 
 function memCache() {
   const store = new Map<string, Response>()

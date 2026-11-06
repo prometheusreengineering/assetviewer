@@ -57,13 +57,23 @@ npm run test:coverage    # code coverage report in coverage/
 `node scripts/coverage.mjs` checks catalog coverage: it sorts every file in the CDN indexes into an item, a dependency of an item,
 or a resource, and prints `UNCLAIMED 0` (exit code 1 otherwise). Run it after changing `src/providers/lunar/catalog.ts`.
 
-GitHub Actions (`.github/workflows/test.yml`) runs the type check and all tests with code coverage on every push to `main` and on pull requests,
-and uploads the coverage report as a build artifact.
+GitHub Actions (`.github/workflows/ci.yml`) runs the type check and all tests with code coverage on every push (any branch or tag),
+on pull requests from forks and on manual runs, and uploads the coverage report as a build artifact. When the exact same files
+already passed (a merge of an up-to-date branch, a release tag on a tested commit), the tests are skipped.
 
 ### Deployment
 
-Hosted on Cloudflare Workers (static assets) at [assetviewer.dreamys.studio](https://assetviewer.dreamys.studio), built from `main` by
-Workers Builds (build command `npm run build`, then `wrangler deploy` with `wrangler.jsonc`; `PRIMEUI_LICENSE` set as a build secret).
+Hosted on Cloudflare Workers (static assets) at [assetviewer.prometheusreengineer.ing](https://assetviewer.prometheusreengineer.ing).
+Pushes to `main` don't deploy: a release is a `v*` tag on a commit of `main`, deployed by the CI's `deploy` job once the tests pass
+(`npm run build`, then `wrangler deploy` with `wrangler.jsonc`):
+
+```sh
+git tag v1.2.3
+git push --atomic origin main v1.2.3
+```
+
+Every other branch gets a preview at `<branch>-assetviewer.<subdomain>.workers.dev` (link in the run summary); previews never touch
+production. The workflow needs the repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `PRIMEUI_LICENSE`.
 The site is static except `worker/`, which proxies `/dawn/*` to Dawn's asset CDN (it sends no CORS headers); `npm run dev` does
 the same through the Vite dev server.
 

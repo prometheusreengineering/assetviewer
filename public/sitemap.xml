@@ -2,7 +2,7 @@
 <!-- Hash routing: every page lives under the one root URL. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://assetviewer.dreamys.studio/</loc>
+    <loc>https://assetviewer.prometheusreengineer.ing/</loc>
     <lastmod>2026-10-15</lastmod>
     <changefreq>weekly</changefreq>
   </url>

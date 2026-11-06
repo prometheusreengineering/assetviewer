@@ -1,0 +1,174 @@
+on:
+  # Every branch and every tag; a v* tag also deploys, other branches than main get a preview.
+  push:
+  pull_request:
+  # A manual run always runs the tests, even if the same files passed before.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Read earlier runs/jobs and the PRs of a commit, to find an earlier pass on the same files.
+  actions: read
+  pull-requests: read
+
+# The same commit pushed as main and as a tag together: the second run waits for the first and then finds its pass.
+concurrency:
+  group: ci-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  # The tree hash names the exact files. A merge of an up-to-date branch, a squash of it, or a tag on a
+  # tested commit has the same tree as a commit whose `test` job already passed, so `test` is skipped.
+  # Candidates: this commit (tag), its parents (merge commit), the heads of its PRs (squash).
+  # Only push runs on this repo count: a fork's PR run executes the fork's own copy of this workflow.
+  check:
+    # A PR from a branch of this repo is already tested by the push run (its checks show on the PR);
+    # only PRs from forks need their own run. Skipping this job skips `test` too.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      hit: ${{ steps.seen.outputs.hit }}
+    steps:
+      - name: Look for an earlier pass on the same files
+        id: seen
+        # A manual run always tests.
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const commit = async (sha) => (await github.rest.git.getCommit({ owner, repo, commit_sha: sha })).data
+            const head = await commit(context.sha)
+            const candidates = new Set([context.sha, ...head.parents.map((p) => p.sha)])
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha })
+            for (const pr of prs.data) if (pr.head.repo?.full_name === `${owner}/${repo}`) candidates.add(pr.head.sha)
+            const { data: self } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: context.runId })
+            for (const sha of candidates) {
+              if (sha !== context.sha && (await commit(sha)).tree.sha !== head.tree.sha) continue
+              const runs = await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: self.workflow_id, head_sha: sha, per_page: 20 })
+              for (const run of runs.data.workflow_runs) {
+                if (run.id === context.runId || run.event === 'pull_request' || run.head_repository?.id !== self.repository.id) continue
+                const jobs = await github.rest.actions.listJobsForWorkflowRun({ owner, repo, run_id: run.id })
+                if (jobs.data.jobs.some((j) => j.name === 'test' && j.conclusion === 'success')) {
+                  core.setOutput('hit', 'true')
+                  await core.summary.addRaw(`These exact files (tree \`${head.tree.sha}\`) already passed: ${run.html_url}. Tests skipped.`).write()
+                  return
+                }
+              }
+            }
+
+  test:
+    needs: check
+    if: needs.check.outputs.hit != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Type check
+        run: npx vue-tsc -b
+      # unit + dom + browser projects; the live tests read the real Lunar CDN
+      - name: Tests
+        run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+  # Only a pushed release tag (v1.2.3) on a commit of main is deployed, and only once the tests passed (or the same files passed before).
+  deploy:
+    needs: [check, test]
+    # always(): a skipped `test` would otherwise skip this job too.
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v') &&
+      (needs.test.result == 'success' || needs.check.outputs.hit == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One deploy at a time; a newer push waits instead of racing an older one.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      # A tag doesn't belong to a branch: release only commits that main already contains
+      # (main is ahead of or at the tagged commit). Push main before the tag, or both with --atomic.
+      - name: Tagged commit must be on main
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const { data } = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${context.sha}...main` })
+            if (data.status !== 'ahead' && data.status !== 'identical') {
+              core.setFailed(`${context.ref} points at ${context.sha}, which is not on main (${data.status}); not deploying.`)
+            }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      # PRIMEUI_LICENSE is picked up through vite's envPrefix and embedded in the bundle.
+      - run: npm run build
+        env:
+          PRIMEUI_LICENSE: ${{ secrets.PRIMEUI_LICENSE }}
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4'
+          command: deploy
+
+  # Every branch but main gets a preview version on workers.dev, next to the tests rather than after them:
+  # `versions upload` never touches production, which keeps serving the last release.
+  preview:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A newer push to the same branch replaces an upload still in progress.
+    concurrency:
+      group: preview-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          PRIMEUI_LICENSE: ${{ secrets.PRIMEUI_LICENSE }}
+      # The alias becomes part of a hostname (<alias>-assetviewer.<subdomain>.workers.dev):
+      # lowercase letters, digits and dashes, starting with a letter, short enough for a 63-char label.
+      - name: Alias from the branch name
+        id: alias
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          a=$(printf '%s' "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-40 | sed -E 's/-+$//')
+          case "$a" in [a-z]*) ;; *) a="b-$a" ;; esac
+          echo "alias=$a" >> "$GITHUB_OUTPUT"
+      - uses: cloudflare/wrangler-action@v3
+        id: upload
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4'
+          command: versions upload --preview-alias ${{ steps.alias.outputs.alias }} --message "preview ${{ steps.alias.outputs.alias }} ${{ github.sha }}"
+      - name: Preview URLs
+        env:
+          OUT: ${{ steps.upload.outputs.command-output }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          {
+            echo "### Preview of \`$BRANCH\`"
+            printf '%s\n' "$OUT" | grep -oE 'https://[^ ]+\.workers\.dev[^ ]*' | sort -u | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
