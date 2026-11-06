@@ -133,6 +133,13 @@ describe('HomeView / ControlsHelp', () => {
     expect(wrapper.findAll('a').map((a) => a.attributes('href'))).toContain('https://github.com/prometheusreengineering/assetviewer')
     expect(wrapper.findAll('a').every((a) => a.attributes('rel') === 'noopener')).toBe(true)
   })
+  it("describes where the items come from: a public CDN, or the viewer's own files", async () => {
+    const cdn = await mountApp(HomeView, { props: { provider: { id: 'x', name: 'Dawn Client', available: true } as never } })
+    expect(cdn.wrapper.find('.lead').text()).toContain('public asset CDN')
+    const own = await mountApp(HomeView, { props: { provider: { id: 'y', name: 'Essential Mod', available: true, setup: { needed: () => false } } as never } })
+    expect(own.wrapper.find('.lead').text()).toContain('your own game files')
+    expect(own.wrapper.find('.lead').text()).not.toContain('CDN')
+  })
   it('the help icon carries the controls tooltip', async () => {
     const { wrapper } = await mountApp(ControlsHelp)
     expect(wrapper.find('i.pi-question-circle').exists()).toBe(true)

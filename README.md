@@ -10,8 +10,8 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
 
 - Browses ALL cosmetics, emotes and resources on Lunar Client's public asset CDN (6,500+ items), and every cosmetic on
   Dawn Client's asset CDN (860+ items, with animated textures).
-- Shows Essential Mod cosmetics from your own installation: pick your `.minecraft` folder and the cosmetic dumps
-  (written by the Prometheus patch) and Essential Mod's cosmetic cache are read locally in your browser. Nothing of
+- Shows Essential Mod cosmetics from your own installation: pick the cosmetic dumps folder (written by the Prometheus
+  patch) and Essential Mod's `cosmetic-cache` folder, and they are read locally in your browser. Nothing of
   Essential Mod is hosted here and nothing is uploaded. Glow layers, animated textures, colour variants, sides, skin
   masks, particle effects, and emotes with their sounds are all shown.
 - Previews every cosmetic in 3D: hats, cloaks, wings, pets, suits, auras and more, with their animations.

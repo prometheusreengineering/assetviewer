@@ -1,7 +1,7 @@
 import { getFreshBuffer } from '../../cdn'
 import type { CosmeticItem } from '../types'
 
-/** Same-origin proxy of https://assets.dawn.gg/assets/ (functions/dawn in production, the Vite proxy in dev). */
+/** Same-origin proxy of https://assets.dawn.gg/assets/ (worker/dawnProxy.ts in production, the Vite proxy in dev). */
 export const DAWN_BASE = '/dawn/'
 export const INDEX_PATH = 'assets_index.json'
 const COSMETICS = 'game/cosmetics/'
