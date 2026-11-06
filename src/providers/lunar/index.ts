@@ -397,6 +397,8 @@ function blobUrl(path: string): Promise<string> {
   if (!p) {
     const type = MIME[path.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream'
     p = getFileBuffer(hashOf(path)).then((b) => URL.createObjectURL(new Blob([b], { type })))
+    // A failed download can be tried again next time.
+    p.catch(() => blobs.delete(path))
     blobs.set(path, p)
   }
   return p
@@ -434,12 +436,18 @@ export const lunarProvider: CosmeticProvider = {
   about: { host: 'textures.lunarclientcdn.com', owner: 'Lunar Client or Moonsworth', credits: ["Emotes are stored in McHorse's Blockbuster model format."] },
 
   load() {
-    loading ??= loadLunarCatalog().then((c) => {
-      catalog = c
-      byId = new Map(c.entries.map((e) => [e.item.id, e]))
-      owners = undefined
-      enrich(c)
-    })
+    loading ??= loadLunarCatalog()
+      .then((c) => {
+        catalog = c
+        byId = new Map(c.entries.map((e) => [e.item.id, e]))
+        owners = undefined
+        enrich(c)
+      })
+      .catch((err) => {
+        // Not cached: coming back to this provider tries again.
+        loading = undefined
+        throw err
+      })
     return loading
   },
 
