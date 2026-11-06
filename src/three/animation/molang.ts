@@ -56,12 +56,24 @@ const MATH: Record<string, (...n: number[]) => number> = {
 type Tok = { t: 'num' | 'id' | 'op' | 'str'; v: string }
 const TOKEN = /\s*(?:(\d*\.?\d+(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z_0-9.]*)|('[^']*')|(==|!=|<=|>=|&&|\|\||\?\?|[-+*/<>!?:(),=;{}]))/gy
 
+const warned = new Set<string>()
+function warnUnreadable(src: string, at: number) {
+  if (warned.has(src)) return
+  warned.add(src)
+  console.warn(`Molang: can't read "${src.slice(at, at + 20)}" in "${src}"; ignoring the rest`)
+}
+
 function tokenize(src: string): Tok[] {
   const out: Tok[] = []
   TOKEN.lastIndex = 0
   while (TOKEN.lastIndex < src.length) {
+    const at = TOKEN.lastIndex
     const m = TOKEN.exec(src)
-    if (!m) break
+    if (!m) {
+      // What we can't read is dropped and the rest still runs; say so, or the wrong pose looks like a model bug.
+      if (src.slice(at).trim()) warnUnreadable(src, at)
+      break
+    }
     if (m[1] !== undefined) out.push({ t: 'num', v: m[1] })
     else if (m[2] !== undefined) out.push({ t: 'id', v: m[2] })
     else if (m[3] !== undefined) out.push({ t: 'str', v: m[3] })
