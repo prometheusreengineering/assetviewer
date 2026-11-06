@@ -108,7 +108,7 @@ const sortKey = () => `assetviewer.sort.${props.provider}.${props.category}`
 function loadSort(): SortKey[] {
   try {
     const v = JSON.parse(localStorage.getItem(sortKey()) ?? '[]')
-    return Array.isArray(v) ? v : []
+    return Array.isArray(v) ? v.filter((s) => typeof s?.field === 'string' && (s.dir === 'asc' || s.dir === 'desc')) : []
   } catch {
     return []
   }
@@ -137,11 +137,13 @@ watch(
   },
   { deep: true },
 )
-watch(sorts, (v) => {
+// Saved only when the viewer changes it here: opening someone's link mustn't replace the remembered sort.
+function setSorts(v: SortKey[]) {
+  sorts.value = v
   try {
     localStorage.setItem(sortKey(), JSON.stringify(v))
   } catch {}
-})
+}
 
 const allItems = computed<CosmeticItem[]>(() => {
   if (!ready.value || !props.category || isTool.value) return []
@@ -373,7 +375,7 @@ const menuModel = computed(() => {
         </span>
       </div>
       <div class="toolbar">
-        <FilterBar v-model:search="search" v-model:rules="rules" v-model:sorts="sorts" :fields="fields" :measuring="measuring">
+        <FilterBar v-model:search="search" v-model:rules="rules" :sorts="sorts" :fields="fields" :measuring="measuring" @update:sorts="setSorts">
         <Button :label="allSelected ? 'Deselect all' : 'Select all'" :icon="allSelected ? 'pi pi-minus-circle' : 'pi pi-check-square'" size="small" severity="secondary" :disabled="!items.length" @click="toggleSelectAll" />
         <!-- Selection actions are always there; they gray out (with a tooltip saying why) until they can work. -->
         <span :title="compareHint"><Button label="Compare" icon="pi pi-clone" size="small" severity="secondary" :disabled="!canCompare" @click="compare" /></span>
