@@ -11,16 +11,16 @@ such as [Lunar Client](https://github.com/prometheusreengineering/minecraft-luna
 - Browses ALL cosmetics, emotes and resources on Lunar Client's public asset CDN (6,500+ items), and every cosmetic on
   Dawn Client's asset CDN (860+ items, with animated textures).
 - Shows Essential Mod cosmetics from your own installation: pick your `.minecraft` folder and the cosmetic dumps
-  (written by the Prometheus patch) and Essential's cosmetic cache are read locally in your browser. Nothing of
-  Essential is hosted here and nothing is uploaded. Glow layers, animated textures, colour variants, sides, skin
+  (written by the Prometheus patch) and Essential Mod's cosmetic cache are read locally in your browser. Nothing of
+  Essential Mod is hosted here and nothing is uploaded. Glow layers, animated textures, colour variants, sides, skin
   masks, particle effects, and emotes with their sounds are all shown.
 - Previews every cosmetic in 3D: hats, cloaks, wings, pets, suits, auras and more, with their animations.
 - Plays emotes on a player, including props and particle effects.
 - Shows cosmetics on a player with any Minecraft skin (wide or slim arms), alone or as a full outfit in the outfit builder.
 - Search, filter and sort on any field, with the view kept in the URL so it can be shared.
 - Collections, side-by-side compare and ZIP export of the source files.
-- Essential outfits follow Essential's own rules: items that can't be worn together, parts hidden by other
-  cosmetics or by armor (drawn stand-in pieces, in any of Essential's three armor modes), and any Essential emote as
+- Essential Mod outfits follow Essential Mod's own rules: items that can't be worn together, parts hidden by other
+  cosmetics or by armor (drawn stand-in pieces, in any of Essential Mod's three armor modes), and any Essential Mod emote as
   the pose.
 - Runs entirely in the browser; downloaded files are cached locally.
 
@@ -42,7 +42,7 @@ The build reads a `PRIMEUI_LICENSE` key from a `.env` file in the project root (
 Tests use [Vitest](https://vitest.dev) in three projects:
 
 - **unit** (`tests/unit`, Node): parsers, catalog, geometry and other pure logic, run against a small fixture CDN.
-  `tests/unit/live` checks the real Lunar and Dawn CDNs (needs network, about a minute).
+  `tests/unit/live` checks the real Lunar Client and Dawn Client CDNs (needs network, about a minute).
 - **dom** (`tests/dom`, happy-dom): Vue components and the whole app on the fixture CDN, with WebGL faked.
 - **browser** (`tests/browser`, Chromium through Playwright): real WebGL rendering, Cache Storage and live models.
   Run `npx playwright install chromium` once before the first run.
@@ -74,14 +74,14 @@ git push --atomic origin main v1.2.3
 
 Every other branch gets a preview at `<branch>-assetviewer.<subdomain>.workers.dev` once its tests pass (link in the run summary);
 previews never touch production. The workflow needs the repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `PRIMEUI_LICENSE`.
-The site is static except `worker/`, which proxies `/dawn/*` to Dawn's asset CDN (it sends no CORS headers); `npm run dev` does
+The site is static except `worker/`, which proxies `/dawn/*` to Dawn Client's asset CDN (it sends no CORS headers); `npm run dev` does
 the same through the Vite dev server.
 
 ## Disclaimer
 
 This project is intended for educational purposes only. We are not responsible for any damage caused by this project.
 
-Assets belong to their respective owners. This project is not affiliated with Lunar Client, Moonsworth, Dawn Client, Essential or ModCore.
+Assets belong to their respective owners. This project is not affiliated with Lunar Client, Moonsworth, Dawn Client, Essential Mod or ModCore.
 
 This project was made almost entirely with Claude Opus 5.5 on Medium/High effort.
 

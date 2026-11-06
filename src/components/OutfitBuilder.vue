@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
             {{ p.label }}
           </button>
         </div>
-        <Select v-model="armorMode" :options="MODES" option-label="label" option-value="value" size="small" class="mode" :disabled="!armor.length" title="Essential's setting for cosmetics worn together with armor" />
+        <Select v-model="armorMode" :options="MODES" option-label="label" option-value="value" size="small" class="mode" :disabled="!armor.length" title="Essential Mod's setting for cosmetics worn together with armor" />
       </template>
     </aside>
     <section class="stage">

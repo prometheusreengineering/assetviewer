@@ -31,7 +31,7 @@ const sizes = new Map<string, number>()
 const baseName = (p: string) => p.split('/').pop()!
 function hashOf(path: string) {
   const h = catalog!.files.get(path)
-  if (!h) throw new Error(`Not in Dawn index: ${path}`)
+  if (!h) throw new Error(`Not in Dawn Client index: ${path}`)
   return h
 }
 async function fetchBuf(path: string) {

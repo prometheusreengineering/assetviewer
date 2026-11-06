@@ -45,7 +45,7 @@ export const essentialState = ref<{ connected: boolean; storedHandle: boolean; r
 
 /** Reads the dumps of `f` and makes them the catalog. */
 export async function connect(f: Partial<EssentialFolders>): Promise<void> {
-  if (!f.dumps) throw new Error('No Essential dumps found in that folder (expected prometheus/essential/dumps).')
+  if (!f.dumps) throw new Error('No Essential Mod dumps found in that folder (expected prometheus/essential/dumps).')
   const c = buildEssentialCatalog(await readDumps(f.dumps))
   if (!c.entries.length) throw new Error('The dumps folder has no cosmetics.')
   folders = { dumps: f.dumps, cache: f.cache }
@@ -499,9 +499,9 @@ async function dress(items: CosmeticItem[], emote?: CosmeticItem, opts: DressOpt
 
 export const essentialProvider: CosmeticProvider = {
   id: 'essential',
-  name: 'Essential',
+  name: 'Essential Mod',
   available: true,
-  about: { host: 'your own Essential files (nothing is hosted here)', owner: 'Essential or ModCore' },
+  about: { host: 'your own Essential Mod files (nothing is hosted here)', owner: 'Essential Mod or ModCore' },
   setup: { needed: () => !catalog, disconnect: forget },
 
   async load() {

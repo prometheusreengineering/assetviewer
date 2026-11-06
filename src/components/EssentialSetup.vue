@@ -53,10 +53,10 @@ async function copy(path: string) {
 <template>
   <div class="setup">
     <article>
-      <h1>Essential cosmetics from your own files</h1>
+      <h1>Essential Mod cosmetics from your own files</h1>
       <p class="lead">
-        Essential has no public cosmetics index, and this site hosts none of its files. Choose two folders from your
-        Minecraft install instead: the cosmetic dumps written by the Prometheus patch and Essential's own cosmetic cache.
+        Essential Mod has no public cosmetics index, and this site hosts none of its files. Choose two folders from your
+        Minecraft install instead: the cosmetic dumps written by the Prometheus patch and Essential Mod's own cosmetic cache.
         They are read right here in your browser; nothing is uploaded.
       </p>
 
@@ -91,7 +91,7 @@ async function copy(path: string) {
       </ol>
       <div class="go">
         <Button label="Show my cosmetics" icon="pi pi-check" :disabled="!dumpsFiles.length || !cacheFiles.length" :loading="busy" @click="useFiles" />
-        <label class="remember" title="Keeps a copy of the chosen files in this browser's own storage (on this device only), so next time it opens by itself. Disconnect on the Essential home page removes it.">
+        <label class="remember" title="Keeps a copy of the chosen files in this browser's own storage (on this device only), so next time it opens by itself. Disconnect on the Essential Mod home page removes it.">
           <Checkbox v-model="remember" binary /> Remember on this device
         </label>
       </div>

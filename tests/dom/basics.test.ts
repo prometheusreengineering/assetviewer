@@ -99,7 +99,7 @@ describe('ProviderSwitch', () => {
     await wrapper.find('.switch').trigger('click')
     await settle()
     const opts = $$('.opt')
-    expect(opts.map((o) => o.querySelector('strong')!.textContent)).toEqual(['Lunar Client', 'Dawn Client', 'Essential'])
+    expect(opts.map((o) => o.querySelector('strong')!.textContent)).toEqual(['Lunar Client', 'Dawn Client', 'Essential Mod'])
     expect(opts[0]!.classList.contains('on')).toBe(true)
     opts[1]!.click()
     await settle()

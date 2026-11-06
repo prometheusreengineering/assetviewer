@@ -80,7 +80,7 @@ describe('config and providers', () => {
   it('essential needs the files of the viewer before it has anything', async () => {
     const p = essentialProvider
     expect(p.available).toBe(true)
-    expect(p.name).toBe('Essential')
+    expect(p.name).toBe('Essential Mod')
     await expect(p.load()).resolves.toBeUndefined()
     expect(p.setup!.needed()).toBe(true)
     expect(p.categories()).toEqual([])

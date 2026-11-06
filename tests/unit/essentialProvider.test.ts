@@ -58,7 +58,7 @@ describe('connected catalog', () => {
   })
 
   it('connecting a folder without dumps fails clearly', async () => {
-    await expect(connect({})).rejects.toThrow(/No Essential dumps/)
+    await expect(connect({})).rejects.toThrow(/No Essential Mod dumps/)
     await expect(connect({ dumps: memorySource({}) })).rejects.toThrow(/no cosmetics/)
     // the previous connection is kept
     expect(ep.items('everything')).toHaveLength(5)
