@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { autoRotate, freeRotate } from '../viewPrefs'
+import { releaseRenderer } from '../three/releaseRenderer'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import AnimatedImage from './AnimatedImage.vue'
 
@@ -39,9 +40,8 @@ function teardown() {
   token++
   cancelAnimationFrame(raf)
   controls?.dispose()
-  renderer?.dispose()
-  renderer?.domElement.remove()
   for (const p of panes.value) p.model?.dispose()
+  if (renderer) releaseRenderer(renderer)
   renderer = undefined
   controls = undefined
   panes.value = []

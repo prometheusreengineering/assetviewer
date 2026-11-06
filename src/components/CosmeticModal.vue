@@ -12,6 +12,7 @@ import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js
 import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
 import { download, zipFiles } from '../download'
+import { releaseRenderer } from '../three/releaseRenderer'
 import { formatBytes } from '../format'
 import { autoRotate, freeRotate, sound, wireframe } from '../viewPrefs'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
@@ -70,9 +71,8 @@ function teardown() {
   token++
   cancelAnimationFrame(raf)
   controls?.dispose()
-  renderer?.dispose()
-  renderer?.domElement.remove()
   model?.dispose()
+  if (renderer) releaseRenderer(renderer)
   model = undefined
   renderer = undefined
   controls = undefined

@@ -2,6 +2,7 @@ import { AmbientLight, DirectionalLight, MOUSE, PerspectiveCamera, Scene, WebGLR
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import type { LoadedModel } from '../providers/types'
+import { releaseRenderer } from './releaseRenderer'
 
 /** One canvas with a model, trackball (free rotate) or orbit (upright) controls, Shift+drag pans, and an optional slow spin. */
 export class Viewer {
@@ -96,7 +97,6 @@ export class Viewer {
     this.resize.disconnect()
     this.setModel(undefined)
     this.controls?.dispose()
-    this.renderer.dispose()
-    this.renderer.domElement.remove()
+    releaseRenderer(this.renderer)
   }
 }

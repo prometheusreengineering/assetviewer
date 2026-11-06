@@ -105,6 +105,44 @@ describe('SharedRenderer', () => {
     return m
   }
 
+  it('viewers opened and closed one after another never cost the grid its context', () => {
+    const { r } = grid()
+    let lost = 0
+    r.domElement.addEventListener('webglcontextlost', () => lost++)
+    // Chromium allows 16 contexts: this would evict the oldest, the grid's, if closing didn't give them back.
+    for (let i = 0; i < 24; i++) {
+      const host = box(document.createElement('div'), { width: '50px', height: '50px' })
+      document.body.append(host)
+      new Viewer(host).dispose()
+      host.remove()
+    }
+    expect(r.getContext().isContextLost()).toBe(false)
+    expect(lost).toBe(0)
+  })
+
+  it('draws again on a new context after the browser takes the old one away', async () => {
+    const { sr, a, r, frame } = grid()
+    sr.add({ el: a, object: cube() })
+    frame(16)
+    expect(pixel(r, 100, 100)[3]).toBe(255)
+    r.forceContextLoss()
+    await vi.waitFor(() => expect((sr as unknown as { renderer: WebGLRenderer }).renderer).not.toBe(r))
+    const next = (sr as unknown as { renderer: WebGLRenderer }).renderer
+    expect(next.domElement.isConnected).toBe(true)
+    expect(r.domElement.isConnected).toBe(false)
+    expect(next.domElement.width).toBeGreaterThan(0)
+    frame(32)
+    expect(pixel(next, 100, 100)[3]).toBe(255)
+  })
+
+  it("detaching releases the context and isn't treated as a loss to recover from", async () => {
+    const { sr, r } = grid()
+    sr.detach()
+    expect(r.getContext().isContextLost()).toBe(true)
+    await new Promise((res) => setTimeout(res, 50))
+    expect((sr as unknown as { renderer: WebGLRenderer }).renderer).toBe(r)
+  })
+
   it('draws each slot in its own viewport and keeps the button corners clear', () => {
     const { sr, a, r, frame } = grid()
     const tick = vi.fn()
