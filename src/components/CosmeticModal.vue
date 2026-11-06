@@ -11,6 +11,7 @@ import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
+import { notify } from '../dialogs'
 import { download, zipFiles } from '../download'
 import { releaseRenderer } from '../three/releaseRenderer'
 import { formatBytes } from '../format'
@@ -59,6 +60,9 @@ const emoteCategory = computed(() => (props.provider.emoteCategory === undefined
 const emoteOptions = computed(() => (canDress.value && emoteCategory.value ? props.provider.items(emoteCategory.value).map((e) => ({ label: e.name, value: e.id })) : []))
 
 let model: LoadedModel | undefined
+// The model's own turn before auto-rotate adds to it; a GLB is exported at this angle.
+let restRotation = 0
+let exporting = false
 let renderer: WebGLRenderer | undefined
 type Controls = TrackballControls | OrbitControls
 let controls: Controls | undefined
@@ -128,6 +132,7 @@ async function open(item: CosmeticItem) {
       return
     }
     model = loaded
+    restRotation = loaded.object.rotation.y
     // ".webp, .obj, .json": the distinct extensions of the source files in the zip
     zipExts.value = [...new Set(loaded.files.map((f) => '.' + (f.name.split('.').pop() ?? '').toLowerCase()))].join(', ')
     hasModel.value = true
@@ -185,7 +190,7 @@ async function open(item: CosmeticItem) {
     let last = 0
     const loop = (ms: number) => {
       raf = requestAnimationFrame(loop)
-      if (autoRotate.value && last) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
+      if (autoRotate.value && last && !exporting) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
       last = ms
       controls?.update()
       loaded.tick(ms)
@@ -275,11 +280,28 @@ function downloadZip() {
 }
 
 async function downloadGlb() {
-  const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js')
-  new GLTFExporter().parse(
-    model!.object,
-    (result) => download(`${slug()}.glb`, result as ArrayBuffer, 'model/gltf-binary'),
-    (e) => (error.value = String(e)),
+  // The exporter is the one lazily loaded chunk: a tab left open across a release can't find its old file any more.
+  const exporter = await import('three/examples/jsm/exporters/GLTFExporter.js').catch(() => undefined)
+  if (!exporter) return notify('GLB export unavailable', 'Asset Viewer was updated since this page opened. Reload the page and try again.', 'pi pi-exclamation-triangle')
+  const m = model!
+  // Exported at its own angle, not wherever auto-rotate has got to (the writer reads it asynchronously).
+  const spin = m.object.rotation.y
+  m.object.rotation.y = restRotation
+  exporting = true
+  const done = () => {
+    exporting = false
+    m.object.rotation.y = spin
+  }
+  new exporter.GLTFExporter().parse(
+    m.object,
+    (result) => {
+      done()
+      download(`${slug()}.glb`, result as ArrayBuffer, 'model/gltf-binary')
+    },
+    (e) => {
+      done()
+      error.value = String(e)
+    },
     { binary: true },
   )
 }
