@@ -445,6 +445,8 @@ describe('download / stats / router', () => {
     expect(router.currentRoute.value.params).toEqual({ provider: 'lunar', category: 'cloak' })
     await router.push('/essential')
     expect(router.currentRoute.value.params.provider).toBe('essential')
-    expect(router.resolve('/other/x').matched).toHaveLength(0)
+    // Anything else goes to the first provider rather than rendering an empty page.
+    await router.push('/other/x')
+    expect(router.currentRoute.value.params.provider).toBe('lunar')
   })
 })

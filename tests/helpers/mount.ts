@@ -12,6 +12,7 @@ export function testRouter() {
     routes: [
       { path: '/', redirect: '/lunar' },
       { path: '/:provider(lunar|dawn|essential)/:category?', component: ProviderView, props: true },
+      { path: '/:pathMatch(.*)*', redirect: '/lunar' },
     ],
   })
 }
