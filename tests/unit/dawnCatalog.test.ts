@@ -86,6 +86,21 @@ describe('catalog', () => {
     ])
   })
 
+  it('emotes: the skeleton, its animation and props texture (if any), shown as name tiles', () => {
+    const c = fixture()
+    expect(byId(c, 'emotes/emoteCandy')).toMatchObject({
+      kind: 'emote',
+      path: `${G}emotes/emoteCandy.geo.json`,
+      parts: [{ geo: `${G}emotes/emoteCandy.geo.json`, texture: `${G}emotes/emoteCandy.webp` }],
+      anim: `${G}emotes/emoteCandy.animation.json`,
+      item: { name: 'Emote Candy', category: 'emotes', render: '3d', thumb: 'none' },
+    })
+    expect(byId(c, 'emotes/emoteCandy').files).toHaveLength(3)
+    // without props there is no texture (and the bare skeleton isn't a shared model file)
+    expect(byId(c, 'emotes/emoteBow')).toMatchObject({ kind: 'emote', parts: [{ geo: `${G}emotes/emoteBow.geo.json`, texture: '' }] })
+    expect(c.entries.filter((e) => e.files.some((f) => f.includes('/emotes/'))).map((e) => e.kind)).toEqual(['emote', 'emote'])
+  })
+
   it('files filed under the wrong folder join the model of the same name', () => {
     const aura = byId(fixture(), 'auras/strayAura')
     expect(aura.files).toContain(`${G}pets/strayAura.webp`)

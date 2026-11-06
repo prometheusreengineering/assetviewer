@@ -121,8 +121,8 @@ export interface CosmeticProvider {
   loadModel(item: CosmeticItem, opts?: { raw?: boolean; slim?: boolean }): Promise<LoadedModel>
   /** A player wearing `items`, optionally playing an emote item. */
   dressPlayer?(items: CosmeticItem[], emote?: CosmeticItem, opts?: DressOptions): Promise<LoadedModel>
-  /** The category whose items are poses in the outfit builder (default `emotes`). */
-  emoteCategory?: string
+  /** The category whose items are poses in the outfit builder (default `emotes`; null = no poses). */
+  emoteCategory?: string | null
   /** Outfit rules: the categories `item` can't be worn together with (Essential MUTUALLY_EXCLUSIVE). */
   exclusions?(item: CosmeticItem): Promise<string[]>
   /** The outfit builder offers armor (drawn stand-ins) and the provider's armor rules. */

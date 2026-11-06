@@ -8,15 +8,16 @@ import { fitObject } from '../../three/fit'
 import type { GeoFile } from '../../three/geoModel'
 import { SHIELD_DISPLAY, SHIELD_FILE_TO_MODEL, vanillaHeld } from '../../three/held'
 import { buildRig, finish } from '../../three/rig'
+import { buildEmote, type EssentialEmoteFile } from '../essential/emote'
 import { CAPE_GEO, CAPE_ON_PLAYER, lunarHashOf } from '../lunar'
 import { dressPlayer } from '../lunar/dress'
 import type { CategoryDef, CosmeticItem, CosmeticProvider, DownloadFile, FieldDef, IndexedFile, LoadedModel } from '../types'
-import { DAWN_CATEGORIES, DAWN_RESOURCES, dawnUrl, loadDawnCatalog, type DawnCatalog, type DawnEntry } from './catalog'
+import { DAWN_CATEGORIES, DAWN_RESOURCES, EMOTE_BONES, EMOTES, dawnUrl, loadDawnCatalog, type DawnCatalog, type DawnEntry } from './catalog'
 
 export { normalizeAnims }
 export const EVERYTHING = 'everything'
 export const OUTFIT = 'outfit'
-const KIND_LABELS: Record<string, string> = { geo: 'Model', variant: 'Colour variant', cloak: 'Cloak', shield: 'Flat shield', trim: 'Armor trim', image: 'Image', file: 'File' }
+const KIND_LABELS: Record<string, string> = { geo: 'Model', variant: 'Colour variant', cloak: 'Cloak', shield: 'Flat shield', trim: 'Armor trim', emote: 'Emote', image: 'Image', file: 'File' }
 // Dawn uses no custom Molang functions (only math.* and q.anim_time).
 const NO_LIB: FnLib = new Map()
 
@@ -103,6 +104,17 @@ async function loadParts(e: DawnEntry, raw: boolean): Promise<LoadedModel> {
   return combine(parts, raw ? object : fitObject(object))
 }
 
+/** An emote: the viewer's skin built into the skeleton's anchors (as Essential's), its props, its one animation. */
+async function loadEmote(e: DawnEntry): Promise<LoadedModel> {
+  const { geo, texture } = e.parts[0]!
+  const [g, anim, img] = await Promise.all([
+    fetchJson<GeoFile>(geo),
+    e.anim ? fetchJson<EssentialEmoteFile>(e.anim) : Promise.resolve({ animations: {} }),
+    texture ? fetchBuf(texture).then((b) => decodeFrames(b, mimeOf(texture))) : undefined,
+  ])
+  return buildEmote({ geo: g, anim, texture: img?.bitmap, layout: img?.layout, boneNames: EMOTE_BONES, effects: new Map(), sound: async () => undefined, files: [] })
+}
+
 async function loadCloak(e: DawnEntry, raw: boolean): Promise<LoadedModel> {
   const img = await decodeFrames(await fetchBuf(e.path), mimeOf(e.path))
   // Cloaks use the OptiFine 22x17 layout (at x16): the same cape box as Lunar's.
@@ -122,7 +134,8 @@ function blobUrl(path: string): Promise<string> {
 
 /** The item's files plus the shared ones its model is drawn with (a variant's borrowed geometry, the flat shield). */
 function sourcePaths(e: DawnEntry): string[] {
-  return [...new Set([...e.files, ...e.parts.flatMap((p) => [p.geo, p.texture]), ...(e.anim ? [e.anim] : []), ...(e.meta ? [e.meta] : [])])]
+  // (an emote without props has no texture: '')
+  return [...new Set([...e.files, ...e.parts.flatMap((p) => [p.geo, p.texture]), ...(e.anim ? [e.anim] : []), ...(e.meta ? [e.meta] : [])])].filter(Boolean)
 }
 
 // Typical sizes by extension, for the export estimate before anything was downloaded.
@@ -171,9 +184,10 @@ export const dawnProvider: CosmeticProvider = {
     const counts = new Map<string, number>()
     for (const e of catalog!.entries) counts.set(e.item.category, (counts.get(e.item.category) ?? 0) + 1)
     const defs: CategoryDef[] = [{ id: EVERYTHING, count: catalog!.entries.length, label: 'Everything', icon: 'pi-th-large', group: '' }]
-    for (const [id, [label, icon]] of Object.entries(DAWN_CATEGORIES)) if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: 'Cosmetics (3D)' })
+    // Emotes aren't outfit slots (the builder's slots are the "Cosmetics" groups).
+    for (const [id, [label, icon]] of Object.entries(DAWN_CATEGORIES)) if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: id === EMOTES ? 'Emotes' : 'Cosmetics (3D)' })
     for (const [id, [label, icon]] of Object.entries(DAWN_RESOURCES)) if (counts.has(id)) defs.push({ id, label, icon, count: counts.get(id)!, group: 'Resources' })
-    const wearable = catalog!.entries.filter((e) => e.item.render === '3d').length
+    const wearable = catalog!.entries.filter((e) => e.item.render === '3d' && e.kind !== 'emote').length
     defs.push({ id: OUTFIT, count: wearable, label: 'Outfit builder', icon: 'pi-user-edit', group: 'Tools' })
     return defs
   },
@@ -204,10 +218,13 @@ export const dawnProvider: CosmeticProvider = {
 
   itemById: (id) => byId.get(id)?.item,
 
+  // Dawn emotes play in the modal; posing an outfit with them isn't supported yet.
+  emoteCategory: null,
+
   async dressPlayer(items) {
     // The player body and skin are Lunar's (its CDN has the emote armature).
     const hashOf = await lunarHashOf()
-    const entries = items.map((it) => byId.get(it.id)).filter((e): e is DawnEntry => !!e && e.item.render === '3d')
+    const entries = items.map((it) => byId.get(it.id)).filter((e): e is DawnEntry => !!e && e.item.render === '3d' && e.kind !== 'emote')
     return dressPlayer(entries, undefined, undefined, hashOf, (e, slim) => dawnProvider.loadModel(e.item, { raw: true, slim }))
   },
 
@@ -217,7 +234,9 @@ export const dawnProvider: CosmeticProvider = {
     const e = byId.get(item.id)!
     const raw = !!opts?.raw
     if (e.kind !== 'cloak' && !e.parts.length) throw new Error(`${item.name} has no 3D model`)
-    const [m, files] = await Promise.all([e.kind === 'cloak' ? loadCloak(e, raw) : loadParts(e, raw), dawnProvider.sourceFiles!(item)])
+    if (e.kind === 'emote' && raw) throw new Error(`${item.name} is an emote, not a wearable cosmetic`)
+    const load = e.kind === 'cloak' ? loadCloak(e, raw) : e.kind === 'emote' ? loadEmote(e) : loadParts(e, raw)
+    const [m, files] = await Promise.all([load, dawnProvider.sourceFiles!(item)])
     m.files = files
     return m
   },

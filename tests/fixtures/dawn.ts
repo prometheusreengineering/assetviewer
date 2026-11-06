@@ -46,6 +46,24 @@ export const TRIM_CHEST_GEO = geo(64, 32, [
   { name: 'anchor_body', pivot: [0, 24, 0], cubes: [cube([-4, 12, -2], [8, 12, 4], [16, 16])] },
   { name: 'anchor_rightarm', pivot: [-5, 22, 0], cubes: [cube([-8, 12, -2], [4, 12, 4], [40, 16])] },
 ])
+// An emote: the bare player skeleton (anchors), a prop in the right hand, and one animation that waves.
+const SKELETON = [
+  { name: 'anchor_rightleg', pivot: [-1.9, 12, 0] },
+  { name: 'anchor_leftleg', pivot: [1.9, 12, 0] },
+  { name: 'anchor_head', pivot: [0, 24, 0] },
+  { name: 'anchor_body', pivot: [0, 24, 0] },
+  { name: 'anchor_rightarm', pivot: [-5, 22, 0] },
+  { name: 'r_attachment', parent: 'anchor_rightarm', pivot: [0, 0, 0] },
+  { name: 'anchor_leftarm', pivot: [5, 22, 0] },
+]
+export const EMOTE_GEO = geo(32, 32, [...SKELETON, { name: 'bucket', parent: 'r_attachment', pivot: [-6, 10, 0], cubes: [cube([-8, 6, -2], [4, 4, 4])] }])
+export const BARE_EMOTE_GEO = geo(32, 32, SKELETON)
+export const EMOTE_ANIM = {
+  format_version: '1.8.0',
+  animations: {
+    'animation.emoteCandy.idle': { loop: true, animation_length: 1, bones: { anchor_rightarm: { rotation: { '0.0': [0, 0, 0], '0.5': [0, 0, 120], '1.0': [0, 0, 0] } } } },
+  },
+}
 export const AURA_GEO = geo(16, 16, [{ name: 'anchor_body', pivot: [0, 0, 0], cubes: [cube([-8, 0, -8], [16, 0, 16])] }])
 
 export const DAWN_FILES: [string, FileBody][] = [
@@ -77,5 +95,11 @@ export const DAWN_FILES: [string, FileBody][] = [
   // the same aura's texture and animation, filed under pets
   [`${G}pets/strayAura.webp`, webpVP8X(16, 16)],
   [`${G}pets/strayAura.animation.json`, { animations: {} }],
+  [`${G}emotes/emoteCandy.geo.json`, EMOTE_GEO],
+  [`${G}emotes/emoteCandy.animation.json`, EMOTE_ANIM],
+  [`${G}emotes/emoteCandy.webp`, webpVP8X(32, 32)],
+  // no props: no texture
+  [`${G}emotes/emoteBow.geo.json`, BARE_EMOTE_GEO],
+  [`${G}emotes/emoteBow.animation.json`, { ...EMOTE_ANIM, animations: { 'animation.emoteBow.idle': EMOTE_ANIM.animations['animation.emoteCandy.idle'] } }],
   ['game/lang/en_us.json', { 'feather.modulename.cosmetic': 'Cosmetics' }],
 ]

@@ -15,7 +15,7 @@ const route = useRoute()
 const router = useRouter()
 
 // Every wearable 3D category is a slot; the emote category gives the poses.
-const emoteCat = props.provider.emoteCategory ?? 'emotes'
+const emoteCat = props.provider.emoteCategory === undefined ? 'emotes' : props.provider.emoteCategory
 const slots = computed(() => props.provider.categories().filter((c) => c.group?.startsWith('Cosmetics') && c.id !== emoteCat))
 // Only what can be worn (a few cosmetics are flat images without a model).
 const options = (cat: string) => props.provider.items(cat).filter((it) => it.render === '3d').map((it) => ({ label: it.name, value: it.id }))
@@ -24,7 +24,7 @@ const optionsFor = (cat: string) => {
   if (!optionCache.has(cat)) optionCache.set(cat, options(cat))
   return optionCache.get(cat)!
 }
-const emoteOptions = computed(() => props.provider.items(emoteCat).map((e) => ({ label: e.name, value: e.id })))
+const emoteOptions = computed(() => (emoteCat ? props.provider.items(emoteCat) : []).map((e) => ({ label: e.name, value: e.id })))
 
 // Outfit = category -> item id. The URL (?o=cat:id,...&e=emote) wins over the saved outfit, so links share it.
 // Per provider (Lunar keeps the original key so saved outfits survive).

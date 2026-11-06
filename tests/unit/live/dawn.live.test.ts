@@ -3,7 +3,7 @@ import { Mesh, MeshLambertMaterial } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { AnimationPlayer, type AnimFile } from '../../../src/three/animation/bedrockAnim'
 import { buildGeoRig, type GeoFile } from '../../../src/three/geoModel'
-import { buildDawnCatalog, DAWN_CATEGORIES, type DawnCatalog, type DawnIndexEntry } from '../../../src/providers/dawn/catalog'
+import { buildDawnCatalog, DAWN_CATEGORIES, EMOTE_BONES, type DawnCatalog, type DawnIndexEntry } from '../../../src/providers/dawn/catalog'
 
 const ORIGIN = 'https://assets.dawn.gg/assets/'
 let index: DawnIndexEntry[]
@@ -52,7 +52,8 @@ describe('live Dawn catalog', () => {
     for (const e of cat.entries) {
       for (const p of e.parts) {
         expect(cat.files.has(p.geo), p.geo).toBe(true)
-        expect(cat.files.has(p.texture), p.texture).toBe(true)
+        // (an emote without props has no texture)
+        if (p.texture || e.kind !== 'emote') expect(cat.files.has(p.texture), p.texture).toBe(true)
       }
       if (e.anim) expect(cat.files.has(e.anim)).toBe(true)
     }
@@ -60,13 +61,20 @@ describe('live Dawn catalog', () => {
 })
 
 describe('live Dawn models', () => {
-  it('every geometry builds a rig with meshes', () => {
+  it('every geometry builds a rig with meshes; emote skeletons have a bone for every player part', () => {
     const failures: string[] = []
     const mat = new MeshLambertMaterial()
+    const emoteGeos = new Set(cat.entries.filter((e) => e.kind === 'emote').map((e) => e.parts[0]!.geo))
+    expect(emoteGeos.size).toBeGreaterThan(0)
     for (const [p, g] of json) {
       if (!p.endsWith('.geo.json')) continue
       try {
-        const { root } = buildGeoRig(g as GeoFile, mat)
+        const { root, bones } = buildGeoRig(g as GeoFile, mat)
+        // An emote's skeleton is bare bones: the player's parts are built into them when it plays.
+        if (emoteGeos.has(p)) {
+          for (const b of Object.values(EMOTE_BONES)) if (!bones.has(b)) failures.push(`${p}: no ${b}`)
+          continue
+        }
         let meshes = 0
         root.traverse((o) => void (o instanceof Mesh && meshes++))
         if (!meshes) failures.push(`${p}: no meshes`)

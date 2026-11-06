@@ -9,7 +9,7 @@ import { EffectPlayer, particleCues, type LoadedEffect } from '../../three/effec
 import { fitObject, visibleBox } from '../../three/fit'
 import { buildGeoRig, createMaterial, createTexture, type GeoBone, type GeoFile } from '../../three/geoModel'
 import { transparentPixel } from '../../three/glow'
-import { buildRig, finish, singleFrame } from '../../three/rig'
+import { buildRig, finish, singleFrame, type FrameLayout } from '../../three/rig'
 import type { DownloadFile, LoadedModel } from '../types'
 import { socket } from '../lunar/dress'
 import { emoteTimeline } from '../lunar/emotes'
@@ -58,6 +58,10 @@ export interface EmoteSources {
   anim: EssentialEmoteFile
   /** Props texture (the emote's texture.png), if any. */
   texture?: ImageBitmap
+  /** Its frame grid, for an animated texture (Dawn's WebP); a single frame by default. */
+  layout?: FrameLayout
+  /** Skeleton bone of each player part when it isn't named like the part (Dawn's `anchor_head`, ...). */
+  boneNames?: Partial<Record<string, string>>
   effects: Map<string, LoadedEffect>
   sounds?: SoundDefinitions
   /** Bytes of a sound file by its path without extension (`sounds/em_x_start`). */
@@ -83,7 +87,7 @@ export async function buildEmote(src: EmoteSources, outfit?: EmoteOutfit): Promi
   const slim = isSlimSkin(plain)
   // Props and the skeleton: the emote's own texture (a transparent pixel when it has none).
   const propTex = src.texture ?? (await transparentPixel())
-  const rig = buildRig(src.geo, propTex, singleFrame(), src.files, {
+  const rig = buildRig(src.geo, propTex, (src.texture && src.layout) || singleFrame(), src.files, {
     raw: true,
     flipU: true,
     // Bedrock geometry is x-mirrored and faces -z, like every other Bedrock model here.
@@ -94,13 +98,14 @@ export async function buildEmote(src: EmoteSources, outfit?: EmoteOutfit): Promi
   // the same name (same pivot), so the emote's animation carries it.
   const parts = playerParts(slim)
   const pivots = new Map((src.geo['minecraft:geometry'][0]?.bones ?? []).map((b) => [b.name, b.pivot ?? [0, 0, 0]] as const))
+  const boneOf = (part: string) => src.boneNames?.[part] ?? part
   const bones: GeoBone[] = Object.entries(parts)
-    .filter(([name]) => skel.has(name))
-    .map(([name, cubes]) => ({ name, pivot: [...pivots.get(name)!] as [number, number, number], cubes }))
+    .filter(([name]) => skel.has(boneOf(name)))
+    .map(([name, cubes]) => ({ name, pivot: [...(pivots.get(boneOf(name)) ?? [0, 0, 0])] as [number, number, number], cubes }))
   const skinMat = createMaterial(createTexture(skin))
   const player = buildGeoRig({ 'minecraft:geometry': [{ description: { texture_width: 64, texture_height: 64 }, bones }] } as GeoFile, skinMat, true)
   for (const [name, b] of player.bones) {
-    const target = skel.get(name)!.group
+    const target = skel.get(boneOf(name))!.group
     b.group.position.set(0, 0, 0)
     b.group.rotation.set(0, 0, 0)
     target.add(b.group)
@@ -181,6 +186,8 @@ export async function buildEmote(src: EmoteSources, outfit?: EmoteOutfit): Promi
     timeline,
     tick(ms) {
       tick(ms)
+      // Texture frames only (the skeleton rig has no animation of its own; the timeline poses it).
+      model.tick(ms)
       if (pausable.paused) sounds?.stop()
     },
     setSound: (on) => sounds?.setEnabled(on),

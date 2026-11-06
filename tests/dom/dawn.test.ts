@@ -39,15 +39,16 @@ describe('Dawn in the app', () => {
     expect(router.currentRoute.value.path).toBe('/dawn/home')
     expect($('.home .lead')!.textContent).toContain('Dawn Client cosmetics')
     expect($('.home')!.textContent).toContain('assets.dawn.gg')
-    expect(menu().slice(0, 4)).toEqual(['Home', 'Everything (15)', 'Hats (3)', 'Wings (1)'])
+    expect(menu().slice(0, 4)).toEqual(['Home', 'Everything (17)', 'Hats (3)', 'Wings (1)'])
     expect(menu()).toContain('Armor trims (1)')
     expect(menu()).toContain('Language files (1)')
+    expect(menu()).toContain('Emotes (2)')
     expect(document.title).toBe('Asset Viewer – Dawn Client cosmetics viewer')
   })
 
   it('footer names Dawn and its index hash', async () => {
     await open('/dawn/home')
-    expect(stats.value).toMatchObject({ name: 'Dawn Client', items: 15, files: DAWN_FILES.length })
+    expect(stats.value).toMatchObject({ name: 'Dawn Client', items: 17, files: DAWN_FILES.length })
     expect($('.foot')!.textContent).toContain('Not affiliated with Dawn Client. Assets are served from assets.dawn.gg.')
     expect($$('.foot code')).toHaveLength(1)
   })

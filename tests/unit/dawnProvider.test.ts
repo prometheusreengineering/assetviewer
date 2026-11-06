@@ -1,4 +1,4 @@
-import { Mesh, type Object3D } from 'three'
+import { Mesh, Vector3, type Object3D } from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { dawnProvider as dp, EVERYTHING, normalizeAnims } from '../../src/providers/dawn'
 import { FLAT_SHIELD } from '../../src/providers/dawn/catalog'
@@ -28,7 +28,10 @@ afterAll(() => vi.unstubAllGlobals())
 describe('catalog in the UI', () => {
   it('categories: Everything, cosmetics in sidebar order, then resources', () => {
     const cats = dp.categories()
-    expect(cats.map((c) => c.id)).toEqual(['everything', 'hats', 'wings', 'auras', 'cloaks', 'shields', 'boots', 'trim', 'models', 'lang', 'outfit'])
+    expect(cats.map((c) => c.id)).toEqual(['everything', 'hats', 'wings', 'auras', 'cloaks', 'shields', 'boots', 'trim', 'emotes', 'models', 'lang', 'outfit'])
+    // emotes aren't outfit slots (nor counted as wearable), and there are no poses yet
+    expect(cats.find((c) => c.id === 'emotes')).toMatchObject({ label: 'Emotes', count: 2, group: 'Emotes' })
+    expect(dp.emoteCategory).toBeNull()
     expect(cats.at(-1)).toMatchObject({ label: 'Outfit builder', group: 'Tools', count: 10 })
     expect(cats.find((c) => c.id === 'hats')).toMatchObject({ label: 'Hats', count: 3, group: 'Cosmetics (3D)' })
     expect(cats.find((c) => c.id === 'lang')).toMatchObject({ label: 'Language files', group: 'Resources' })
@@ -127,6 +130,31 @@ describe('models', () => {
     const shield = await dp.loadModel(item('shields/testShield'))
     expect(meshes(shield.object).length).toBe(1)
     expect(shield.files.map((f) => f.name).sort()).toEqual([FLAT_SHIELD.split('/').pop(), 'testShield.avif'].sort())
+  })
+
+  it("an emote plays on the viewer's skin built into its skeleton, with its props", async () => {
+    const m = await dp.loadModel(item('emotes/emoteCandy'))
+    expect(item('emotes/emoteCandy').fields).toMatchObject({ kind: 'Emote', category: 'Emotes', hasAnimation: true })
+    // six player parts (base + outer layer) and the bucket
+    expect(meshes(m.object).length).toBe(13)
+    expect(m.timeline).toBeDefined()
+    // the right arm (and the bucket in its hand) waves: the hand moves between ticks
+    const hand = () => {
+      m.object.updateMatrixWorld(true)
+      return new Vector3().setFromMatrixPosition(m.object.getObjectByName('bucket')!.matrixWorld)
+    }
+    m.timeline!.seek(0)
+    const rest = hand()
+    m.timeline!.seek(0.5)
+    expect(hand().distanceTo(rest)).toBeGreaterThan(0.1)
+    expect(m.files.map((f) => f.name).sort()).toEqual(['emoteCandy.animation.json', 'emoteCandy.geo.json', 'emoteCandy.webp'])
+    m.dispose()
+    // no props: just the player, and no texture is fetched
+    const bare = await dp.loadModel(item('emotes/emoteBow'))
+    expect(meshes(bare.object).length).toBe(12)
+    expect(bare.files.map((f) => f.name).sort()).toEqual(['emoteBow.animation.json', 'emoteBow.geo.json'])
+    // not wearable
+    await expect(dp.loadModel(item('emotes/emoteBow'), { raw: true })).rejects.toThrow('emote')
   })
 
   it('images have no model; their url is a blob of the cached bytes', async () => {

@@ -14,7 +14,7 @@ export interface DawnIndexEntry {
   hash: string
 }
 
-export type DawnKind = 'geo' | 'variant' | 'cloak' | 'shield' | 'trim' | 'image' | 'file'
+export type DawnKind = 'geo' | 'variant' | 'cloak' | 'shield' | 'trim' | 'emote' | 'image' | 'file'
 
 export interface DawnPart {
   geo: string
@@ -57,7 +57,20 @@ export const DAWN_CATEGORIES: Record<string, [string, string]> = {
   arm: ['Arms', 'pi-hammer'],
   boots: ['Boots', 'pi-arrow-down'],
   trim: ['Armor trims', 'pi-star'],
+  emotes: ['Emotes', 'pi-video'],
 }
+/** Emotes are a bare player skeleton (`anchor_*` bones, maybe props) plus its animation: poses, not worn. */
+export const EMOTES = 'emotes'
+/** The emote skeleton's bone for each player part (Essential's part names, see `playerParts`). */
+export const EMOTE_BONES: Record<string, string> = {
+  head: 'anchor_head',
+  body: 'anchor_body',
+  arm_right: 'anchor_rightarm',
+  arm_left: 'anchor_leftarm',
+  leg_right: 'anchor_rightleg',
+  leg_left: 'anchor_leftleg',
+}
+
 export const DAWN_RESOURCES: Record<string, [string, string]> = {
   models: ['Shared models', 'pi-box'],
   lang: ['Language files', 'pi-language'],
@@ -140,12 +153,20 @@ export function buildDawnCatalog(index: DawnIndexEntry[], indexHash = ''): DawnC
     byBase.set(base, [...(byBase.get(base) ?? []), key])
   }
 
-  // 1. Models with their own geometry and texture.
+  // 1. Models with their own geometry and texture, and emotes (a texture only when they have props).
   const models = new Map<string, DawnEntry>()
+  const emotes = new Set<string>()
   for (const [key, g] of groups) {
     const [folder, base] = key.split('/') as [string, string]
     const geo = g.get('geo.json')
     const tex = texOf(g)
+    if (folder === EMOTES && geo) {
+      // Shown as a name tile (no icons); the modal plays it on the player.
+      const it = { ...item(key, humanize(base), folder, '3d'), thumb: 'none' as const }
+      push({ item: it, kind: 'emote', path: geo, parts: [{ geo, texture: tex ?? '' }], anim: g.get('animation.json'), files: [...g.values()] })
+      emotes.add(key)
+      continue
+    }
     if (!geo || !tex || folder === 'trim') continue
     const e: DawnEntry = {
       item: item(key, humanize(base), folder, '3d'),
@@ -169,7 +190,7 @@ export function buildDawnCatalog(index: DawnIndexEntry[], indexHash = ''): DawnC
 
   const trims = new Map<string, { slot: string; texture: string }[]>()
   for (const [key, g] of groups) {
-    if (models.has(key)) continue
+    if (models.has(key) || emotes.has(key)) continue
     const [folder, base] = key.split('/') as [string, string]
     const tex = texOf(g)
     const rest = [...g.values()].filter((p) => p !== tex)

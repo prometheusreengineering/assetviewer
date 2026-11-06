@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   # The tree hash names the exact files. A merge of an up-to-date branch, a squash of it, or a tag on a
-  # tested commit has the same tree as a commit whose `test` job already passed, so `test` is skipped.
+  # tested commit has the same tree as a commit whose `test` job already ran, so `test` isn't run again:
+  # an earlier pass skips it, an earlier failure fails this job (unless this is a re-run).
   # Candidates: this commit (tag), its parents (merge commit), the heads of its PRs (squash).
   # Only push runs on this repo count: a fork's PR run executes the fork's own copy of this workflow.
   check:
@@ -44,18 +45,29 @@ jobs:
             const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha })
             for (const pr of prs.data) if (pr.head.repo?.full_name === `${owner}/${repo}`) candidates.add(pr.head.sha)
             const { data: self } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: context.runId })
+            // The latest real result counts, across all candidates (a re-run that passed beats the failure before it).
+            let latest
             for (const sha of candidates) {
               if (sha !== context.sha && (await commit(sha)).tree.sha !== head.tree.sha) continue
               const runs = await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: self.workflow_id, head_sha: sha, per_page: 20 })
               for (const run of runs.data.workflow_runs) {
                 if (run.id === context.runId || run.event === 'pull_request' || run.head_repository?.id !== self.repository.id) continue
                 const jobs = await github.rest.actions.listJobsForWorkflowRun({ owner, repo, run_id: run.id })
-                if (jobs.data.jobs.some((j) => j.name === 'test' && j.conclusion === 'success')) {
-                  core.setOutput('hit', 'true')
-                  await core.summary.addRaw(`These exact files (tree \`${head.tree.sha}\`) already passed: ${run.html_url}. Tests skipped.`).write()
-                  return
-                }
+                const job = jobs.data.jobs.find((j) => j.name === 'test' && (j.conclusion === 'success' || j.conclusion === 'failure'))
+                if (job && (!latest || job.completed_at > latest.job.completed_at)) latest = { job, run }
               }
+            }
+            if (!latest) return
+            const { job, run } = latest
+            if (job.conclusion === 'success') {
+              core.setOutput('hit', 'true')
+              await core.summary.addRaw(`These exact files (tree \`${head.tree.sha}\`) already passed: ${run.html_url}. Tests skipped.`).write()
+            } else if (Number(process.env.GITHUB_RUN_ATTEMPT) > 1) {
+              // "Re-run jobs" means try again: the live tests can fail because of a CDN, not the code.
+              core.info(`Re-run: testing again despite the earlier failure ${run.html_url}`)
+            } else {
+              // Failing here skips `test` and `deploy`, and the run shows red like the one it repeats.
+              core.setFailed(`These exact files (tree ${head.tree.sha}) already failed: ${run.html_url}. Not testing them again; push a change, or use "Re-run jobs" to retry.`)
             }
 
   test:
