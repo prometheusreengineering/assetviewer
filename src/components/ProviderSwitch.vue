@@ -2,15 +2,16 @@
 import Popover from 'primevue/popover'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { providers } from '../providers'
 
 const props = defineProps<{ provider: string }>()
 const router = useRouter()
 const pop = ref<InstanceType<typeof Popover>>()
 
 const options = [
-  { id: 'lunar', label: 'Lunar Client', desc: 'Cosmetics, emotes and resources from the Lunar Client CDN', icon: 'pi pi-moon' },
-  { id: 'dawn', label: 'Dawn Client', desc: 'Cosmetics from the Dawn Client asset CDN', icon: 'pi pi-sun' },
-  { id: 'essential', label: 'Essential Mod', desc: 'Cosmetics from your own files', icon: 'pi pi-box' },
+  { id: 'lunar', label: providers.lunar!.name, desc: 'Cosmetics, emotes and resources from the Lunar Client CDN', icon: 'pi pi-moon' },
+  { id: 'dawn', label: providers.dawn!.name, desc: 'Cosmetics from the Dawn Client asset CDN', icon: 'pi pi-sun' },
+  { id: 'essential', label: providers.essential!.name, desc: 'Cosmetics from your own files', icon: 'pi pi-box' },
 ]
 const current = computed(() => options.find((o) => o.id === props.provider) ?? options[0]!)
 function pick(id: string) {

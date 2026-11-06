@@ -10,6 +10,21 @@ const run = (src: string, setup?: (s: ReturnType<typeof newScope>) => void, lib 
 
 afterEach(() => vi.restoreAllMocks())
 
+describe('what the tokenizer cannot read', () => {
+  it('runs the readable part and warns once per expression', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(run('1 + 2 ^ 3')).toBe(3)
+    run('1 + 2 ^ 3')
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]![0]).toContain('^ 3')
+    // trailing whitespace isn't something unreadable
+    warn.mockClear()
+    expect(run('1 + 2  ')).toBe(3)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
+
 describe('numbers and arithmetic', () => {
   it.each([
     ['1', 1],

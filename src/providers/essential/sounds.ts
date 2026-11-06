@@ -113,6 +113,8 @@ export class SoundPlayer {
   }
 
   dispose() {
+    // A sound still being read or decoded checks this before it starts.
+    this.on = false
     this.stop()
   }
 }

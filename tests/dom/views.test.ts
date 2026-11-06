@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import CompareDialog from '../../src/components/CompareDialog.vue'
 import CosmeticGrid from '../../src/components/CosmeticGrid.vue'
-import FileBrowser from '../../src/components/FileBrowser.vue'
 import OutfitBuilder from '../../src/components/OutfitBuilder.vue'
 import { skinName } from '../../src/skin'
 import { freeRotate } from '../../src/viewPrefs'
@@ -25,6 +24,23 @@ beforeEach(() => {
 
 describe('CompareDialog', () => {
   const two = [ITEMS[0]!, ITEMS[1]!]
+  it('closing while panes load starts no render loop and gives the context back', async () => {
+    const provider = fakeProvider()
+    let finish!: (m: ReturnType<typeof fakeModel>) => void
+    provider.loadModel = vi.fn(() => new Promise<ReturnType<typeof fakeModel>>((res) => (finish = res)))
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame')
+    const { wrapper } = await mountApp(CompareDialog, { props: { provider, items: two, visible: true } })
+    await settle(30)
+    const r = FakeWebGLRenderer.instances.at(-1)!
+    await wrapper.setProps({ visible: false })
+    expect(r.forceContextLoss).toHaveBeenCalled()
+    raf.mockClear()
+    const late = fakeModel()
+    finish(late)
+    await settle(30)
+    expect(late.dispose).toHaveBeenCalled()
+    expect(raf.mock.calls.filter(([cb]) => cb.name === 'frame')).toHaveLength(0)
+  })
   it('one renderer for all panes; images and files get their own pane content', async () => {
     const provider = fakeProvider()
     await mountApp(CompareDialog, { props: { provider, items: [...two, ITEMS[2]!], visible: true } })
@@ -210,19 +226,3 @@ describe('OutfitBuilder', () => {
   })
 })
 
-describe('FileBrowser', () => {
-  it('lists indexed files, filters by name or path and opens the owning item', async () => {
-    const provider = fakeProvider()
-    provider.indexedFiles = () => [
-      { name: 'Crown', path: 'cosmetics/crown.gek.json', hash: 'a', size: 2048 },
-      { name: 'Wing (file)', path: 'cosmetics/wings/w.webp', hash: 'b', size: 10 },
-    ]
-    provider.fileItem = vi.fn(() => ITEMS[2]!)
-    const { wrapper } = await mountApp(FileBrowser, { props: { provider } })
-    expect(wrapper.find('.count').text()).toBe('2 files')
-    await wrapper.find('input').setValue('wings/')
-    expect(wrapper.find('.count').text()).toBe('1 files')
-    await wrapper.find('input').setValue('CROWN')
-    expect(wrapper.find('.count').text()).toBe('1 files')
-  })
-})

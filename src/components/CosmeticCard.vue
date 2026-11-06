@@ -98,7 +98,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="card" :class="{ selected, gray, saved }" @click="$emit('open')">
+  <div
+    class="card"
+    :class="{ selected, gray, saved }"
+    tabindex="0"
+    role="button"
+    :aria-label="item.name"
+    @click="$emit('open')"
+    @keydown.enter.self="$emit('open')"
+    @keydown.space.self.prevent="$emit('open')"
+  >
     <div ref="el" class="view">
       <AnimatedImage v-if="imgSrc" :src="imgSrc" v-bind="frames" @error="state = 'error'" />
       <div v-else-if="item.render === 'file'" class="filetile"><i class="pi pi-file" /><span>{{ ext || 'file' }}</span></div>
@@ -128,6 +137,10 @@ onBeforeUnmount(() => {
 .coll { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 3; opacity: 0; transition: opacity 0.15s; }
 .card:hover .coll, .coll.show { opacity: 1; }
 .card:hover .pick, .pick.show { opacity: 1; }
+.card:focus-visible { outline: 2px solid var(--p-primary-color); outline-offset: 1px; }
+/* Keyboard users tab onto these, and touch screens have no hover to reveal them. */
+.card:focus-within .pick, .card:focus-within .coll { opacity: 1; }
+@media (hover: none) { .pick, .coll { opacity: 1; } }
 .view { position: relative; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; }
 .view .pi-exclamation-triangle { opacity: 0.4; }
 .filetile { display: grid; place-items: center; gap: 0.25rem; opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; }

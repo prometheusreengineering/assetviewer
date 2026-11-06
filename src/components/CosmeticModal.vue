@@ -8,10 +8,12 @@ import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { AmbientLight, DirectionalLight, MOUSE, Mesh, PerspectiveCamera, Scene, WebGLRenderer, type MeshLambertMaterial } from 'three'
-import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { getFileBuffer } from '../cdn'
+import { notify } from '../dialogs'
 import { download, zipFiles } from '../download'
+import { releaseRenderer } from '../three/releaseRenderer'
 import { formatBytes } from '../format'
 import { autoRotate, freeRotate, sound, wireframe } from '../viewPrefs'
 import type { CosmeticItem, CosmeticProvider, LoadedModel, RawFile, Timeline } from '../providers/types'
@@ -53,9 +55,14 @@ const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.ren
 const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || sides.value.length > 1 || canDress.value || !!timeline.value || hasSound.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
-const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
+// The provider's pose category (null: it can't pose an outfit), as in the outfit builder.
+const emoteCategory = computed(() => (props.provider.emoteCategory === undefined ? 'emotes' : props.provider.emoteCategory))
+const emoteOptions = computed(() => (canDress.value && emoteCategory.value ? props.provider.items(emoteCategory.value).map((e) => ({ label: e.name, value: e.id })) : []))
 
 let model: LoadedModel | undefined
+// The model's own turn before auto-rotate adds to it; a GLB is exported at this angle.
+let restRotation = 0
+let exporting = false
 let renderer: WebGLRenderer | undefined
 type Controls = TrackballControls | OrbitControls
 let controls: Controls | undefined
@@ -70,9 +77,8 @@ function teardown() {
   token++
   cancelAnimationFrame(raf)
   controls?.dispose()
-  renderer?.dispose()
-  renderer?.domElement.remove()
   model?.dispose()
+  if (renderer) releaseRenderer(renderer)
   model = undefined
   renderer = undefined
   controls = undefined
@@ -103,20 +109,22 @@ async function open(item: CosmeticItem) {
   void props.provider.ensureDimensions?.([item], () => {}, new AbortController().signal).then(() => dimTick.value++)
   try {
     if (item.render === 'file') {
-      raw.value = await props.provider.rawFile!(item)
+      const file = await props.provider.rawFile!(item)
+      // A pinned modal can move on to another item while this one loads.
+      if (mine === token) raw.value = file
       return
     }
     if (item.render === 'image') {
-      imgFrames.value = item.fields.animated ? await props.provider.imageFrames?.(item) : undefined
-      imgSrc.value = await props.provider.imageUrl(item)
+      const frames = item.fields.animated ? await props.provider.imageFrames?.(item) : undefined
+      const src = await props.provider.imageUrl(item)
+      if (mine === token) {
+        imgFrames.value = frames
+        imgSrc.value = src
+      }
       return
     }
     const emote = playerEmoteId.value ? props.provider.itemById?.(playerEmoteId.value) : undefined
-    const [loaded, { TrackballControls }, { OrbitControls }] = await Promise.all([
-      dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item),
-      import('three/examples/jsm/controls/TrackballControls.js'),
-      import('three/examples/jsm/controls/OrbitControls.js'),
-    ])
+    const loaded = await (dressed.value ? props.provider.dressPlayer!([item], emote) : props.provider.loadModel(item))
     await nextTick()
     const host = canvasHost.value
     if (!host || mine !== token) {
@@ -124,6 +132,7 @@ async function open(item: CosmeticItem) {
       return
     }
     model = loaded
+    restRotation = loaded.object.rotation.y
     // ".webp, .obj, .json": the distinct extensions of the source files in the zip
     zipExts.value = [...new Set(loaded.files.map((f) => '.' + (f.name.split('.').pop() ?? '').toLowerCase()))].join(', ')
     hasModel.value = true
@@ -181,7 +190,7 @@ async function open(item: CosmeticItem) {
     let last = 0
     const loop = (ms: number) => {
       raf = requestAnimationFrame(loop)
-      if (autoRotate.value && last) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
+      if (autoRotate.value && last && !exporting) loaded.object.rotation.y += Math.min(ms - last, 100) * 0.0002
       last = ms
       controls?.update()
       loaded.tick(ms)
@@ -192,7 +201,7 @@ async function open(item: CosmeticItem) {
     }
     raf = requestAnimationFrame(loop)
   } catch (e) {
-    error.value = String(e)
+    if (mine === token) error.value = String(e)
   } finally {
     if (mine === token) loading.value = false
   }
@@ -221,7 +230,11 @@ onBeforeUnmount(teardown)
 
 const copied = ref(false)
 async function copyLink() {
-  await navigator.clipboard.writeText(location.href)
+  try {
+    await navigator.clipboard.writeText(location.href)
+  } catch {
+    return notify('Could not copy the link', 'The browser blocked clipboard access. Copy it from the address bar instead.', 'pi pi-exclamation-triangle')
+  }
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
@@ -271,11 +284,28 @@ function downloadZip() {
 }
 
 async function downloadGlb() {
-  const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js')
-  new GLTFExporter().parse(
-    model!.object,
-    (result) => download(`${slug()}.glb`, result as ArrayBuffer, 'model/gltf-binary'),
-    (e) => (error.value = String(e)),
+  // The exporter is the one lazily loaded chunk: a tab left open across a release can't find its old file any more.
+  const exporter = await import('three/examples/jsm/exporters/GLTFExporter.js').catch(() => undefined)
+  if (!exporter) return notify('GLB export unavailable', 'Asset Viewer was updated since this page opened. Reload the page and try again.', 'pi pi-exclamation-triangle')
+  const m = model!
+  // Exported at its own angle, not wherever auto-rotate has got to (the writer reads it asynchronously).
+  const spin = m.object.rotation.y
+  m.object.rotation.y = restRotation
+  exporting = true
+  const done = () => {
+    exporting = false
+    m.object.rotation.y = spin
+  }
+  new exporter.GLTFExporter().parse(
+    m.object,
+    (result) => {
+      done()
+      download(`${slug()}.glb`, result as ArrayBuffer, 'model/gltf-binary')
+    },
+    (e) => {
+      done()
+      error.value = String(e)
+    },
     { binary: true },
   )
 }
@@ -405,4 +435,9 @@ label { display: flex; align-items: center; gap: 0.5rem; }
 .pair.wide { grid-column: 1 / -1; }
 .info dt { opacity: 0.6; }
 .info dd { margin: 0; word-break: break-all; }
+@media (max-width: 768px) {
+  .stage { height: 45vh; }
+  .info { grid-template-columns: minmax(0, 1fr); }
+  .scrub { width: 7rem; }
+}
 </style>

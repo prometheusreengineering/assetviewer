@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { autoRotate, freeRotate } from '../viewPrefs'
+import { releaseRenderer } from '../three/releaseRenderer'
 import type { CosmeticItem, CosmeticProvider, LoadedModel } from '../providers/types'
 import AnimatedImage from './AnimatedImage.vue'
 
@@ -39,9 +40,8 @@ function teardown() {
   token++
   cancelAnimationFrame(raf)
   controls?.dispose()
-  renderer?.dispose()
-  renderer?.domElement.remove()
   for (const p of panes.value) p.model?.dispose()
+  if (renderer) releaseRenderer(renderer)
   renderer = undefined
   controls = undefined
   panes.value = []
@@ -105,13 +105,16 @@ async function open() {
           setPane(i, { ...p, model: m, scene, loading: false })
         } else if (p.item.render === 'image') {
           const frames = p.item.fields.animated ? await props.provider.imageFrames?.(p.item) : undefined
-          setPane(i, { ...p, img: await props.provider.imageUrl(p.item), frames, loading: false })
+          const img = await props.provider.imageUrl(p.item)
+          if (mine === token) setPane(i, { ...p, img, frames, loading: false })
         } else setPane(i, { ...p, loading: false })
       } catch (e) {
-        setPane(i, { ...p, error: String(e), loading: false })
+        if (mine === token) setPane(i, { ...p, error: String(e), loading: false })
       }
     }),
   )
+  // Closed or reopened while loading: this renderer is gone, and a loop started now would never be cancelled.
+  if (mine !== token) return
 
   let last = 0
   const frame = (ms: number) => {
@@ -221,4 +224,9 @@ const rows = computed(() => {
 .fields th, .fields td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--av-border); word-break: break-word; vertical-align: top; }
 .fields th:first-child { width: 9rem; opacity: 0.6; font-weight: normal; }
 .fields tr.differs td { background: color-mix(in srgb, var(--p-primary-color) 12%, transparent); }
+/* !important: the column count is set inline from the number of items. */
+@media (max-width: 768px) {
+  .stage { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: 60vh; }
+  .fields th:first-child { width: 5rem; }
+}
 </style>

@@ -19,6 +19,30 @@ beforeEach(() => {
   for (const l of [...c.all()]) l.id === 'fav' ? l.items.splice(0) : c.remove(l.id)
 })
 
+describe('keyboard', () => {
+  const renderer = { add: vi.fn(), remove: vi.fn() }
+  it('a card can be reached and opened with Enter or Space; keys on its buttons stay theirs', async () => {
+    const { wrapper } = await mountApp(CosmeticCard, { props: { provider: fakeProvider(), item: ITEMS[2]! }, global: { provide: { renderer } } })
+    const card = wrapper.find('.card')
+    expect(card.attributes('tabindex')).toBe('0')
+    expect(card.attributes('role')).toBe('button')
+    expect(card.attributes('aria-label')).toBe('File One')
+    await card.trigger('keydown', { key: 'Enter' })
+    await card.trigger('keydown', { key: ' ' })
+    expect(wrapper.emitted('open')).toHaveLength(2)
+    await wrapper.find('.coll button').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('open')).toHaveLength(2)
+  })
+  it('a list row can be opened the same way', async () => {
+    const { wrapper } = await mountApp(CosmeticList, { props: { items: [ITEMS[0]!], selected: new Set<string>(), grayOf: () => false } })
+    const row = wrapper.findAll('.row')[1]!
+    expect(row.attributes('tabindex')).toBe('0')
+    await row.trigger('keydown', { key: 'Enter' })
+    await row.trigger('keydown', { key: ' ' })
+    expect(wrapper.emitted('open')).toHaveLength(2)
+  })
+})
+
 describe('CollectionPicker', () => {
   it('shows the count and fills the bookmark once saved', async () => {
     const { wrapper } = await mountApp(CollectionPicker, { props: { provider: 'lunar', itemId: 'x' } })

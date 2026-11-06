@@ -12,6 +12,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import { autoRotate } from '../viewPrefs'
+import { releaseRenderer } from './releaseRenderer'
 
 export interface Slot {
   el: HTMLElement
@@ -57,12 +58,9 @@ export class SharedRenderer {
   private cssH = 0
 
   constructor() {
-    this.renderer = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setClearColor(0x000000, 0)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer = this.createRenderer()
     this.wrapper = document.createElement('div')
     Object.assign(this.wrapper.style, { position: 'sticky', top: '0', left: '0', height: '0', width: '100%', zIndex: '2', pointerEvents: 'none' })
-    Object.assign(this.renderer.domElement.style, { position: 'absolute', top: '0', left: '0', display: 'block' })
     this.wrapper.appendChild(this.renderer.domElement)
 
     this.grayScene.add(this.grayQuad)
@@ -74,6 +72,35 @@ export class SharedRenderer {
     // Models face -z, so look at them from the front.
     this.camera.position.set(0, 0.5, -4.2)
     this.camera.lookAt(0, 0, 0)
+  }
+
+  private createRenderer() {
+    const r = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
+    r.setClearColor(0x000000, 0)
+    r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    Object.assign(r.domElement.style, { position: 'absolute', top: '0', left: '0', display: 'block' })
+    r.domElement.addEventListener('webglcontextlost', this.onContextLost)
+    return r
+  }
+
+  // The browser took the context away (too many contexts, a GPU reset) and an evicted one never comes back. A new
+  // renderer re-uploads every model and texture by itself, since its resources are tracked per renderer.
+  private onContextLost = () => {
+    const old = this.renderer
+    let next: WebGLRenderer
+    try {
+      next = this.createRenderer()
+    } catch (e) {
+      // No context to be had right now; the grid stays blank rather than the page breaking.
+      console.warn('Could not recreate the WebGL context', e)
+      return
+    }
+    old.domElement.removeEventListener('webglcontextlost', this.onContextLost)
+    old.dispose()
+    old.domElement.replaceWith(next.domElement)
+    this.renderer = next
+    this.cssW = this.cssH = 0
+    this.resize()
   }
 
   attach(container: HTMLElement) {
@@ -89,7 +116,9 @@ export class SharedRenderer {
     cancelAnimationFrame(this.raf)
     this.resizeObserver?.disconnect()
     this.wrapper.remove()
-    this.renderer.dispose()
+    // Our own release isn't a loss to recover from.
+    this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost)
+    releaseRenderer(this.renderer)
     this.container = null
   }
 

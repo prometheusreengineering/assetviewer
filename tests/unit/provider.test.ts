@@ -29,6 +29,22 @@ afterAll(() => {
 })
 
 describe('load', () => {
+  it('a failed load is not remembered: the next one tries again', async () => {
+    vi.resetModules()
+    const { lunarProvider: fresh } = await import('../../src/providers/lunar')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    await expect(fresh.load()).rejects.toThrow('404')
+    vi.stubGlobal('fetch', cdn.fetch)
+    await expect(fresh.load()).resolves.toBeUndefined()
+    expect(fresh.stats!().files).toBe(LUNAR_FILES.length)
+  })
+  it('a failed image download can be tried again', async () => {
+    const it0 = lp.items('hat').find((x) => x.render === 'image') ?? lp.items(EVERYTHING).find((x) => x.render === 'image')!
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    await expect(lp.imageUrl(it0)).rejects.toThrow('404')
+    vi.stubGlobal('fetch', cdn.fetch)
+    expect(await lp.imageUrl(it0)).toMatch(/^blob:/)
+  })
   it('loads once', async () => {
     const n = cdn.requests.length
     await lp.load()

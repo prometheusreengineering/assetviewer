@@ -189,6 +189,27 @@ describe('other urls', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('getUrlBuffer only keeps bytes that match the sha1 in the url', async () => {
+    const { caches, store } = fakeCaches()
+    vi.stubGlobal('caches', caches)
+    vi.stubGlobal('fetch', vi.fn(async () => ok('dawn')))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cdn = await load()
+    // sha1('dawn')
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode('dawn')))
+    const good = `/dawn/x.webp?h=${Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')}`
+    await cdn.getUrlBuffer(good)
+    await vi.waitFor(() => expect(store.has(good)).toBe(true))
+    const wrong = `/dawn/x.webp?h=${'0'.repeat(40)}`
+    // still shown, not remembered: the next visit asks again
+    expect(new TextDecoder().decode(await cdn.getUrlBuffer(wrong))).toBe('dawn')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(store.has(wrong)).toBe(false)
+    expect(console.warn).toHaveBeenCalled()
+    await cdn.getUrlBuffer(wrong)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
   it('getFreshBuffer goes to the network first and falls back to the cache when offline', async () => {
     const { caches, store } = fakeCaches()
     vi.stubGlobal('caches', caches)

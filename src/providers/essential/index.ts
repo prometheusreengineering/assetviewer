@@ -39,6 +39,11 @@ const TILE_CATEGORIES = new Set(['EMOTE', 'ICON'])
 let folders: EssentialFolders | undefined
 let catalog: EssentialCatalog | undefined
 let byId = new Map<string, EssentialEntry>()
+const iconUrls = new Map<string, Promise<string>>()
+function revokeIcons() {
+  for (const p of iconUrls.values()) p.then(URL.revokeObjectURL, () => {})
+  iconUrls.clear()
+}
 
 /** Connection state for the setup panel. */
 export const essentialState = ref<{ connected: boolean; storedHandle: boolean; remembered?: boolean; items: number; files: number; error?: string }>({ connected: false, storedHandle: false, items: 0, files: 0 })
@@ -50,6 +55,7 @@ export async function connect(f: Partial<EssentialFolders>): Promise<void> {
   if (!c.entries.length) throw new Error('The dumps folder has no cosmetics.')
   folders = { dumps: f.dumps, cache: f.cache }
   settingsCache.clear()
+  revokeIcons()
   catalog = c
   byId = new Map(c.entries.map((e) => [e.item.id, e]))
   essentialState.value = { ...essentialState.value, connected: true, items: c.entries.length, files: c.files, error: undefined }
@@ -183,6 +189,7 @@ export async function forget(): Promise<void> {
   folders = undefined
   catalog = undefined
   settingsCache.clear()
+  revokeIcons()
   byId = new Map()
   essentialState.value = { connected: false, storedHandle: false, items: 0, files: 0 }
 }
@@ -192,6 +199,16 @@ async function bytes(e: EssentialEntry, path: string): Promise<ArrayBuffer> {
   const ref = e.files.get(path)
   if (!ref) throw new Error(`${e.item.name} has no ${path}`)
   return assetBytes(folders!, ref, download)
+}
+// One blob: URL per icon: cards ask again each time they scroll back into view.
+function iconUrl(e: EssentialEntry): Promise<string> {
+  let p = iconUrls.get(e.item.id)
+  if (!p) {
+    p = bytes(e, 'texture.png').then((b) => URL.createObjectURL(new Blob([b], { type: 'image/png' })))
+    p.catch(() => iconUrls.delete(e.item.id))
+    iconUrls.set(e.item.id, p)
+  }
+  return p
 }
 const json = async <T>(e: EssentialEntry, path: string) => JSON.parse(new TextDecoder().decode(await bytes(e, path))) as T
 const optionalJson = async <T>(e: EssentialEntry, path: string | undefined) => (path ? json<T>(e, path).catch(() => undefined) : undefined)
@@ -566,7 +583,7 @@ export const essentialProvider: CosmeticProvider = {
     // Icons: their texture, from the local files.
     const e = byId.get(item.id)
     if (!e?.files.has('texture.png')) throw new Error(`${item.name} has no image`)
-    return URL.createObjectURL(new Blob([await bytes(e, 'texture.png')], { type: 'image/png' }))
+    return iconUrl(e)
   },
 
   loadModel(item, opts) {

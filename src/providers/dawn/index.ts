@@ -127,6 +127,8 @@ function blobUrl(path: string): Promise<string> {
   let p = blobs.get(path)
   if (!p) {
     p = fetchBuf(path).then((b) => URL.createObjectURL(new Blob([b], { type: mimeOf(path) })))
+    // A failed download can be tried again next time.
+    p.catch(() => blobs.delete(path))
     blobs.set(path, p)
   }
   return p

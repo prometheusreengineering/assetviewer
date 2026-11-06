@@ -48,7 +48,7 @@ export const OPS: Record<FieldType, { op: Op; label: string }[]> = {
 }
 
 export const valueOf = (item: CosmeticItem, key: string) => (key === 'name' ? item.name : item.fields[key])
-const toArray = (v: unknown): string[] => (Array.isArray(v) ? v : v === undefined || v === '' ? [] : [String(v)])
+export const toArray = (v: unknown): string[] => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [String(v)])
 const DAY = 86_400_000
 
 export function matches(item: CosmeticItem, rule: Rule, type: FieldType): boolean {
@@ -58,7 +58,8 @@ export function matches(item: CosmeticItem, rule: Rule, type: FieldType): boolea
       return (v === true) === !!rule.value
     case 'multi': {
       const have = toArray(v)
-      const want: string[] = rule.value ?? []
+      // A link can pair this field with an op of another type, so the value may not be a list.
+      const want = toArray(rule.value)
       if (!want.length) return true
       if (rule.op === 'all') return want.every((x) => have.includes(x))
       if (rule.op === 'none') return !want.some((x) => have.includes(x))
@@ -80,7 +81,7 @@ export function matches(item: CosmeticItem, rule: Rule, type: FieldType): boolea
       // dates compare by whole day
       if (type === 'date') {
         if (rule.op === 'eq') return v >= a && v < a + DAY
-        if (rule.op === 'between') return v >= a && v < b + DAY
+        if (rule.op === 'between') return v >= Math.min(a, b) && v < Math.max(a, b) + DAY
         if (rule.op === 'gt') return v >= a + DAY
         return v < a
       }
@@ -142,13 +143,23 @@ export function encodeRules(rules: Rule[]): string {
   return btoa(String.fromCharCode(...new TextEncoder().encode(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+const isNumberish = (v: unknown) => v === null || v === undefined || typeof v === 'number'
+
+/** Links can hold anything: each op only accepts the value the filter editor would have written for it. */
+function validValue(op: string, value: unknown, value2: unknown): boolean {
+  if (op === 'is') return typeof value === 'boolean'
+  if (OPS.text.some((o) => o.op === op)) return typeof value === 'string'
+  if (OPS.multi.some((o) => o.op === op)) return Array.isArray(value) && value.every((x) => typeof x === 'string')
+  return OPS.number.some((o) => o.op === op) && isNumberish(value) && isNumberish(value2)
+}
+
 export function decodeRules(s: string): Rule[] {
   try {
     const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'))
     const tuples = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))))
     if (!Array.isArray(tuples)) return []
     return tuples
-      .filter((t) => Array.isArray(t) && typeof t[0] === 'string' && typeof t[1] === 'string')
+      .filter((t) => Array.isArray(t) && typeof t[0] === 'string' && typeof t[1] === 'string' && validValue(t[1], t[2], t[3]))
       .map((t, i) => ({ id: i + 1, field: t[0], op: t[1], value: t[2], ...(t.length > 3 ? { value2: t[3] } : {}) }))
   } catch {
     return []

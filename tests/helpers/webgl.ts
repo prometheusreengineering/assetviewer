@@ -25,6 +25,7 @@ export class FakeWebGLRenderer {
   clearColor = vi.fn()
   render = vi.fn((scene: unknown, camera: unknown) => void this.renders.push({ scene, camera }))
   dispose = vi.fn(() => void (this.disposed = true))
+  forceContextLoss = vi.fn()
   constructor() {
     FakeWebGLRenderer.instances.push(this)
   }

@@ -193,6 +193,35 @@ describe('URL encoding', () => {
     expect(decodeRules(btoa('{"a":1}'))).toEqual([])
     expect(decodeRules(btoa('[[1,"eq",2],["size","eq",3],"x"]'))).toEqual([{ id: 1, field: 'size', op: 'eq', value: 3 }])
   })
+  it('drops rules whose value does not suit the op', () => {
+    const enc = (t: unknown) => btoa(JSON.stringify(t))
+    for (const bad of [
+      ['category', 'any', 'Hats'],
+      ['category', 'none', [1, 2]],
+      ['name', 'contains', 5],
+      ['size', 'gt', 'big'],
+      ['size', 'between', 1, 'x'],
+      ['model', 'is', 'yes'],
+      ['size', 'nonsense', 1],
+    ]) {
+      expect(decodeRules(enc([bad])), JSON.stringify(bad)).toEqual([])
+    }
+    // what the editor itself writes: an empty number and a cleared date are null
+    expect(decodeRules(enc([['size', 'gt', null], ['model', 'is', false]]))).toHaveLength(2)
+  })
+  it('a value of the wrong shape for its field never throws', () => {
+    // The live crash: a link with a text op on a list field reaches matches() with a plain string.
+    const it1 = item('a', { themes: ['Hats'] })
+    expect(matches(it1, rule('themes', 'any', 'Hats'), 'multi')).toBe(true)
+    expect(matches(it1, rule('themes', 'none', 'Hats'), 'multi')).toBe(false)
+    expect(matches(it1, rule('themes', 'any', null), 'multi')).toBe(true)
+  })
+  it('a date range given backwards still matches', () => {
+    const day = 86_400_000
+    const it1 = item('a', { made: 5 * day })
+    expect(matches(it1, rule('made', 'between', 7 * day, 3 * day), 'date')).toBe(true)
+    expect(matches(it1, rule('made', 'between', 7 * day, 6 * day), 'date')).toBe(false)
+  })
   it('round-trips sorts and drops bad parts', () => {
     const sorts = [{ field: 'size', dir: 'desc' as const }, { field: 'name', dir: 'asc' as const }]
     expect(encodeSorts(sorts)).toBe('size:desc,name:asc')

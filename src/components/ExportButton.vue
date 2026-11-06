@@ -47,7 +47,7 @@ async function run() {
         used.add(dir)
         for (const f of files) {
           // Images are already compressed; storing them is much faster.
-          tree[`${dir}/${f.name}`] = [f.data, { level: /\.(webp|png|gif|jpe?g)$/i.test(f.name) ? 0 : 6 }]
+          tree[`${dir}/${f.name}`] = [f.data, { level: /\.(webp|avif|png|gif|jpe?g)$/i.test(f.name) ? 0 : 6 }]
         }
       } catch (e) {
         failed.value.push(`${it.name}: ${e}`)

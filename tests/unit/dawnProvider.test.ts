@@ -25,6 +25,15 @@ beforeAll(async () => {
 })
 afterAll(() => vi.unstubAllGlobals())
 
+describe('failed downloads', () => {
+  it('an image that failed to download can be tried again', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
+    await expect(dp.imageUrl(item('shields/testShield'))).rejects.toThrow('404')
+    vi.stubGlobal('fetch', cdn.fetch)
+    expect(await dp.imageUrl(item('shields/testShield'))).toMatch(/^blob:/)
+  })
+})
+
 describe('catalog in the UI', () => {
   it('categories: Everything, cosmetics in sidebar order, then resources', () => {
     const cats = dp.categories()

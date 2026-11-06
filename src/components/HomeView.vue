@@ -16,8 +16,8 @@ async function disconnect() {
     <article>
       <h1>Asset Viewer</h1>
       <p class="lead">
-        An unofficial viewer for {{ provider.name }} cosmetics. Browse every hat, cloak, wing, pet and resource on the
-        public asset CDN, preview them in 3D, try them on a player with your own skin, and download the source files.
+        An unofficial viewer for {{ provider.name }} cosmetics. Browse every hat, cloak, wing, pet and resource
+        {{ provider.setup ? 'in your own game files' : 'on the public asset CDN' }}, preview them in 3D, try them on a player with your own skin, and download the source files.
       </p>
 
       <p v-if="provider.setup?.disconnect" class="connected">

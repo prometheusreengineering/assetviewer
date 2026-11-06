@@ -42,8 +42,10 @@ describe('sounds', () => {
     ])
   })
 
+  // One array for all tests: the player keeps the first AudioContext it creates for the whole module.
+  const started: number[] = []
   function fakeAudio() {
-    const started: number[] = []
+    started.length = 0
     class Ctx {
       destination = {}
       resume = vi.fn(async () => {})
@@ -58,6 +60,20 @@ describe('sounds', () => {
     vi.stubGlobal('AudioContext', Ctx)
     return started
   }
+
+  it('a sound still loading when the player is disposed never starts', async () => {
+    const started = fakeAudio()
+    let finish!: (b: ArrayBuffer) => void
+    const read = vi.fn(() => new Promise<ArrayBuffer>((res) => (finish = res)))
+    const p = new SoundPlayer([{ anim: 'a', time: 0, effect: 'beat' }], defs, read)
+    p.setEnabled(true)
+    p.at(0, 2)
+    await new Promise((r) => setTimeout(r, 0))
+    p.dispose()
+    finish(new ArrayBuffer(4))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(started).toHaveLength(0)
+  })
 
   it('plays cues as the timeline passes them, only while enabled; wraps on loops; seeks play nothing', async () => {
     const started = fakeAudio()

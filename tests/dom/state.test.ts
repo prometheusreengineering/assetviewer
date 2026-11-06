@@ -107,6 +107,93 @@ describe('collections', () => {
     expect(() => c.importJson('{"a":1}')).toThrow('Not an Asset Viewer collections file')
     expect(() => c.importJson('nope')).toThrow(SyntaxError)
   })
+  it('import checks the whole file before changing anything', async () => {
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const c = useCollections('lunar')
+    const bad = (collections: unknown[]) => expect(() => c.importJson(JSON.stringify({ collections }))).toThrow('Not an Asset Viewer collections file')
+    bad([{ name: 'X', items: ['1'] }, null])
+    bad([{ name: 'Y', items: ['1'] }, { name: 'Z', items: 'abc' }])
+    expect(c.all().map((x) => x.name)).toEqual(['Favorites'])
+    // entries without an id are skipped, not fatal
+    expect(c.importJson(JSON.stringify({ collections: [{ name: 'Ok', items: [null, 5, '', { id: 7 }, 'a'] }] }))).toBe(1)
+    expect(c.all().find((x) => x.name === 'Ok')!.items).toEqual(['a'])
+  })
+  it("import refuses another provider's file; one that names no provider is accepted", async () => {
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const c = useCollections('dawn')
+    const file = useCollections('lunar').exportJson(['fav'], () => undefined)
+    expect(() => c.importJson(file)).toThrow('another provider')
+    expect(c.importJson(JSON.stringify({ provider: 'dawn', collections: [{ name: 'A', items: ['1'] }] }))).toBe(1)
+    expect(c.importJson(JSON.stringify({ collections: [{ name: 'B', items: ['2'] }] }))).toBe(1)
+  })
+  it('keeps saving after the component that first read the lists unmounts', async () => {
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const { createApp, h } = await import('vue')
+    // The real path: ProviderView's first read of a col-* page happens during its setup.
+    const app = createApp({
+      setup() {
+        useCollections('lunar').all()
+        return () => h('div')
+      },
+    })
+    app.mount(document.createElement('div'))
+    app.unmount()
+    useCollections('lunar').toggle('fav', 'after-unmount')
+    await nextTick()
+    expect(JSON.parse(localStorage.getItem(KEY)!)[0].items).toEqual(['after-unmount'])
+  })
+  // A provider of their own: module copies left by earlier tests' fresh() also hear these storage events.
+  it("takes another tab's changes instead of overwriting them later", async () => {
+    const OWN = 'assetviewer.collections.tabs1'
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const c = useCollections('tabs1')
+    c.toggle('fav', 'mine')
+    await vi.waitFor(() => expect(localStorage.getItem(OWN)).toContain('mine'))
+    const theirs = JSON.stringify([{ id: 'fav', name: 'Favorites', items: ['mine', 'theirs'] }])
+    localStorage.setItem(OWN, theirs)
+    dispatchEvent(new StorageEvent('storage', { key: OWN, newValue: theirs }))
+    expect(c.get('fav')!.items).toEqual(['mine', 'theirs'])
+    c.toggle('fav', 'next')
+    await vi.waitFor(() => expect(JSON.parse(localStorage.getItem(OWN)!)[0].items).toEqual(['mine', 'theirs', 'next']))
+    // other keys are none of its business; everything cleared in another tab is
+    dispatchEvent(new StorageEvent('storage', { key: 'assetviewer.other', newValue: 'x' }))
+    expect(c.get('fav')!.items).toHaveLength(3)
+    localStorage.clear()
+    dispatchEvent(new StorageEvent('storage', { key: null }))
+    expect(c.get('fav')!.items).toEqual([])
+  })
+  it("doesn't write back what it just read from another tab", async () => {
+    const OWN = 'assetviewer.collections.tabs2'
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const c = useCollections('tabs2')
+    c.toggle('fav', 'a')
+    await vi.waitFor(() => expect(localStorage.getItem(OWN)).toContain('"a"'))
+    const theirs = JSON.stringify([{ id: 'fav', name: 'Favorites', items: ['b'] }])
+    localStorage.setItem(OWN, theirs)
+    const real = localStorage
+    const set = vi.fn()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => real.getItem(k), setItem: set })
+    dispatchEvent(new StorageEvent('storage', { key: OWN, newValue: theirs }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(set).not.toHaveBeenCalled()
+  })
+  it('says so once when collections cannot be saved', async () => {
+    const { useCollections } = await fresh<Collections>('../../src/collections')
+    const { dialog } = await import('../../src/dialogs')
+    const c = useCollections('lunar')
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('full', 'QuotaExceededError')
+      },
+    })
+    c.toggle('fav', 'a')
+    await vi.waitFor(() => expect(dialog.value?.title).toBe('Collections not saved'))
+    dialog.value = undefined
+    c.toggle('fav', 'b')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(dialog.value).toBeUndefined()
+  })
   it('survives a localStorage that throws', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
@@ -358,6 +445,8 @@ describe('download / stats / router', () => {
     expect(router.currentRoute.value.params).toEqual({ provider: 'lunar', category: 'cloak' })
     await router.push('/essential')
     expect(router.currentRoute.value.params.provider).toBe('essential')
-    expect(router.resolve('/other/x').matched).toHaveLength(0)
+    // Anything else goes to the first provider rather than rendering an empty page.
+    await router.push('/other/x')
+    expect(router.currentRoute.value.params.provider).toBe('lunar')
   })
 })

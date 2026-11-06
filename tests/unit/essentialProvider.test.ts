@@ -285,6 +285,22 @@ describe('dressPlayer', () => {
   })
 })
 
+describe('icons', () => {
+  it('one blob: URL per icon, however often a card asks; dropped with the connection', async () => {
+    const create = vi.spyOn(URL, 'createObjectURL')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    const it0 = item('TEST_TOP')
+    const url = await ep.imageUrl(it0)
+    expect(await ep.imageUrl(it0)).toBe(url)
+    expect(create).toHaveBeenCalledTimes(1)
+    await forget()
+    await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith(url))
+    create.mockRestore()
+    revoke.mockRestore()
+    await connect({ dumps: memorySource(fx.dumps), cache: memorySource(fx.cache) })
+  })
+})
+
 describe('forget', () => {
   it('drops the connection', async () => {
     await forget()
