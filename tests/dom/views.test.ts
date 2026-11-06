@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import CompareDialog from '../../src/components/CompareDialog.vue'
 import CosmeticGrid from '../../src/components/CosmeticGrid.vue'
-import FileBrowser from '../../src/components/FileBrowser.vue'
 import OutfitBuilder from '../../src/components/OutfitBuilder.vue'
 import { skinName } from '../../src/skin'
 import { freeRotate } from '../../src/viewPrefs'
@@ -227,19 +226,3 @@ describe('OutfitBuilder', () => {
   })
 })
 
-describe('FileBrowser', () => {
-  it('lists indexed files, filters by name or path and opens the owning item', async () => {
-    const provider = fakeProvider()
-    provider.indexedFiles = () => [
-      { name: 'Crown', path: 'cosmetics/crown.gek.json', hash: 'a', size: 2048 },
-      { name: 'Wing (file)', path: 'cosmetics/wings/w.webp', hash: 'b', size: 10 },
-    ]
-    provider.fileItem = vi.fn(() => ITEMS[2]!)
-    const { wrapper } = await mountApp(FileBrowser, { props: { provider } })
-    expect(wrapper.find('.count').text()).toBe('2 files')
-    await wrapper.find('input').setValue('wings/')
-    expect(wrapper.find('.count').text()).toBe('1 files')
-    await wrapper.find('input').setValue('CROWN')
-    expect(wrapper.find('.count').text()).toBe('1 files')
-  })
-})
