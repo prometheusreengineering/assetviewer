@@ -10,7 +10,9 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
+    // A real 404: routing is in the URL hash, so the server only serves "/". Falling back to index.html would answer
+    // a missing /assets/ file with HTML, status 200 and a year of immutable caching.
+    "not_found_handling": "none",
     // Only the Dawn proxy runs code; every other request is a static asset.
     "run_worker_first": ["/dawn/*"]
   }
