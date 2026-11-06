@@ -54,7 +54,9 @@ const canDress = computed(() => !!props.provider.dressPlayer && shown.value?.ren
 const hasRow2 = computed(() => states.value.length > 1 || variants.value.length > 1 || sides.value.length > 1 || canDress.value || !!timeline.value || hasSound.value)
 const dressed = computed(() => canDress.value && showOnPlayer.value)
 const usesSkin = computed(() => isEmote.value || dressed.value)
-const emoteOptions = computed(() => (canDress.value ? props.provider.items('emotes').map((e) => ({ label: e.name, value: e.id })) : []))
+// The provider's pose category (null: it can't pose an outfit), as in the outfit builder.
+const emoteCategory = computed(() => (props.provider.emoteCategory === undefined ? 'emotes' : props.provider.emoteCategory))
+const emoteOptions = computed(() => (canDress.value && emoteCategory.value ? props.provider.items(emoteCategory.value).map((e) => ({ label: e.name, value: e.id })) : []))
 
 let model: LoadedModel | undefined
 let renderer: WebGLRenderer | undefined
