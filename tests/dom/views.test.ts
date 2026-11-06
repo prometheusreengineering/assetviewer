@@ -25,6 +25,23 @@ beforeEach(() => {
 
 describe('CompareDialog', () => {
   const two = [ITEMS[0]!, ITEMS[1]!]
+  it('closing while panes load starts no render loop and gives the context back', async () => {
+    const provider = fakeProvider()
+    let finish!: (m: ReturnType<typeof fakeModel>) => void
+    provider.loadModel = vi.fn(() => new Promise<ReturnType<typeof fakeModel>>((res) => (finish = res)))
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame')
+    const { wrapper } = await mountApp(CompareDialog, { props: { provider, items: two, visible: true } })
+    await settle(30)
+    const r = FakeWebGLRenderer.instances.at(-1)!
+    await wrapper.setProps({ visible: false })
+    expect(r.forceContextLoss).toHaveBeenCalled()
+    raf.mockClear()
+    const late = fakeModel()
+    finish(late)
+    await settle(30)
+    expect(late.dispose).toHaveBeenCalled()
+    expect(raf.mock.calls.filter(([cb]) => cb.name === 'frame')).toHaveLength(0)
+  })
   it('one renderer for all panes; images and files get their own pane content', async () => {
     const provider = fakeProvider()
     await mountApp(CompareDialog, { props: { provider, items: [...two, ITEMS[2]!], visible: true } })

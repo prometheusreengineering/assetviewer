@@ -105,13 +105,16 @@ async function open() {
           setPane(i, { ...p, model: m, scene, loading: false })
         } else if (p.item.render === 'image') {
           const frames = p.item.fields.animated ? await props.provider.imageFrames?.(p.item) : undefined
-          setPane(i, { ...p, img: await props.provider.imageUrl(p.item), frames, loading: false })
+          const img = await props.provider.imageUrl(p.item)
+          if (mine === token) setPane(i, { ...p, img, frames, loading: false })
         } else setPane(i, { ...p, loading: false })
       } catch (e) {
-        setPane(i, { ...p, error: String(e), loading: false })
+        if (mine === token) setPane(i, { ...p, error: String(e), loading: false })
       }
     }),
   )
+  // Closed or reopened while loading: this renderer is gone, and a loop started now would never be cancelled.
+  if (mine !== token) return
 
   let last = 0
   const frame = (ms: number) => {
